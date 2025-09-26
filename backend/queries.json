@@ -1,0 +1,8 @@
+{
+    "Quels sont les coloris": "Coloris ou couleurs demandés pour les menuiseries (ex. : blanc, gris, RAL 7016, etc.)",
+    "Quel est le type de vitrage": "Type de vitrage demandé des menuiseries (ex : simple, double, triple vitrage, vitrage ITR, gaz Argon, etc.)",
+    "Quel type de matériau": "Matériaux des menuiseries (PVC, bois, aluminium, mixte)",
+    "Quelle classement AEV": "Classement AEV des menuiseries (résistance à l'air, à l'eau et au vent, ex : A* E* V*)",
+    "Quelles sont les performances thermiques": "Performances thermiques minimales des menuiseries (coefficents ou valeurs Uw, Uws, Sw)",
+    "Quel affaiblissement acoustique": "Affaiblissement acoustique des menuiseries (en dB)"
+}

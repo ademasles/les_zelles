@@ -1,0 +1,62 @@
+services:
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    command: ["serve"]
+    restart: unless-stopped
+
+  ollama-init:
+    image: curlimages/curl:latest
+    depends_on:
+      - ollama
+    entrypoint: >
+      sh -c '
+      until curl -s http://ollama:11434; do sleep 1; done;
+      curl -X POST http://ollama:11434/api/pull -d "{\"name\":\"mistral\"}" -H "Content-Type: application/json"
+      '
+
+    restart: "no"
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - OLLAMA_HOST=http://ollama:11434
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+    depends_on:
+      - ollama
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - BACKEND_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+
+volumes:
+  ollama_data:
+
+

@@ -1,0 +1,5 @@
+streamlit
+requests
+streamlit-option-menu
+streamlit-tags
+docx2txt
