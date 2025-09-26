@@ -62,7 +62,7 @@ sudo apt install libreoffice tesseract-ocr
 Cloner le dépôt :
 
 ```bash
-git clone https://ton-repo/analyse-dce.git
+git clone https://github.com/demaslesa/les_zelles.git
 cd analyse-dce
 ```
 - Créer et activer un environnement virtuel Python :
@@ -147,7 +147,7 @@ backend/queries.json # exemple de résultats
 - LibreOffice en ligne de commande (pour conversion DOCX en PDF)
 
 ## Notes
-- Veiller à ce que les chemins de fichiers et variables d’environnement soient correctement configurés (ex: dossier data/)
+- Veiller à ce que les chemins de fichiers et variables d’environnement soient correctement configurés
 
 - La taille et qualité des documents peuvent impacter la rapidité et pertinence des analyses
 
