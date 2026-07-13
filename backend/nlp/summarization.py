@@ -2,7 +2,7 @@
 """Summarization module for processing text chunks and generating summaries.
 This module provides functions to summarize text chunks using a language model and to generate global summaries.
 """
-# SPDX-FileCopyrightText: 2025 Anton Demasles <
+
 
 #-----------------------------------------------------------------------------------------------
 # IMPORTS

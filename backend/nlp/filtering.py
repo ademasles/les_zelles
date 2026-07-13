@@ -4,7 +4,7 @@ This module provides functions to filter text chunks based on semantic similarit
 It uses SentenceTransformers for embedding and FAISS for efficient similarity search.
 It also includes a function to send prompts to a local LLM API and retrieve answers.
 """
-# SPDX-FileCopyrightText: 2025 Anton Demasles <
+
 
 #-----------------------------------------------------------------------------------------------
 # IMPORTS

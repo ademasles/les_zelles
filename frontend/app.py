@@ -3,7 +3,7 @@
 Streamlit application for analyzing calls for tenders (CCTP) using AI.
 This app allows users to upload documents, analyze them, and ask questions about the content.
 """
-# SPDX-FileCopyrightText: 2023 Anton DEMASLES <
+
 
 #-----------------------------------------------------------------------------------------------
 # IMPORTS

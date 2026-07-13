@@ -6,7 +6,7 @@ Includes models for:
 - Query: user questions
 - Answer: AI responses (including alternatives)
 """
-# SPDX-FileCopyrightText: 2025 Anton Demasles <
+
 
 # -----------------------------------------------------------------------------------------------
 # IMPORTS

@@ -1,7 +1,7 @@
 # train_cross_encoder.py
 """Train a CrossEncoder model using user feedback data."""
 
-# SPDX-FileCopyrightText: 2023 Anton DEMASLES <
+
 
 #-----------------------------------------------------------------------------------------------
 # IMPORTS

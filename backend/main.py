@@ -4,7 +4,7 @@ This module sets up the FastAPI application, defines endpoints for file upload, 
 It integrates various components such as extraction, cleaning, chunking, summarization, and indexing.
 It also provides endpoints for saving projects and retrieving summaries.
 """
-# SPDX-FileCopyrightText: 2025 Anton Demasles <
+
 
 #-----------------------------------------------------------------------------------------------
 # IMPORTS
