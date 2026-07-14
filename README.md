@@ -82,6 +82,24 @@ pip install -r backend/requirements.txt
 ```bash
 pip install -r frontend/requirements.txt
 ```
+### 2.5 Configuration d'environnement
+
+Copier `.env.example` vers `.env` et adapter valeurs locales si nécessaire :
+
+```bash
+cp .env.example .env
+# then edit .env
+```
+
+If `.env` already tracked in git, remove from index (local only):
+
+```bash
+git rm --cached .env
+git commit -m "Remove local env from repo"
+```
+
+Ne pas committer `.env`. `.env.example` contient valeurs sûres pour démarrage local.
+
 ### 3. Lancer l’application
 - Backend (FastAPI)
 
