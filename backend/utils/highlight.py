@@ -1,20 +1,26 @@
 # highlight.py
 """Highlight module for processing text chunks and generating highlighted PDF responses.
-This module provides functions to highlight specific text chunks in a PDF document and return the modified document.
+This module highlights specific text chunks in a PDF document and returns the modified document.
 """
 # SPDX-FileCopyrightText: 2025 Anton Demasles <
 
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
+import os
+from io import BytesIO
+
+import fitz
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-import os
-import fitz
-from io import BytesIO
-from docx2pdf import convert
 
-#-----------------------------------------------------------------------------------------------
+try:
+    from docx2pdf import convert
+except ImportError:  # Optional extra; not installed in Linux Docker by default.
+    convert = None
+
+# -----------------------------------------------------------------------------------------------
+
 
 def highlight_chunk(doc_id: str, chunk_id: int, documents: dict) -> StreamingResponse:
     """
@@ -35,13 +41,18 @@ def highlight_chunk(doc_id: str, chunk_id: int, documents: dict) -> StreamingRes
     try:
         chunk = next(c for c in chunks if c.get("chunk_id") == chunk_id)
     except StopIteration:
-        raise HTTPException(status_code=404, detail="Chunk ID non trouvé")
+        raise HTTPException(status_code=404, detail="Chunk ID non trouvé") from None
 
     highlight_text = chunk.get("chunk_text", "").strip()
     page = chunk.get("page_number")
 
     # Convert DOCX if needed
     if not os.path.exists(input_path_pdf) and os.path.exists(input_path_docx):
+        if convert is None:
+            raise HTTPException(
+                status_code=501,
+                detail="DOCX conversion requires optional docx2pdf dependency",
+            )
         tmp_pdf_path = os.path.join(folder, "converted.pdf")
         convert(input_path_docx, tmp_pdf_path)
         input_path_pdf = tmp_pdf_path
@@ -53,7 +64,7 @@ def highlight_chunk(doc_id: str, chunk_id: int, documents: dict) -> StreamingRes
     try:
         text_page = doc[page - 1]
     except IndexError:
-        raise HTTPException(status_code=400, detail="Page invalide")
+        raise HTTPException(status_code=400, detail="Page invalide") from None
 
     matches = text_page.search_for(highlight_text)
     if not matches:

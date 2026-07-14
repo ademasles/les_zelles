@@ -18,8 +18,9 @@ analyse-dce/
 +---backend/     # Backend FastAPI et logique métier
 |   |   Dockerfile      # Image docker backend
 |   |   main.py     # Point d’entrée FastAPI
+|   |   Makefile     # Commandes locales backend
+|   |   pyproject.toml        # Dépendances et tooling backend
 |   |   queries.json        # Cache des requêtes traitées
-|   |   requirements.txt        # Dépendances backend
 |   |
 |   +---database/
 |   |       database.py     # Gestion base de données
@@ -52,7 +53,7 @@ Python 3.10+
 
 Docker et Docker Compose (optionnel mais recommandé)
 
-libreoffice pour convertir DOCX en PDF (nécessaire sur backend)
+`docx2pdf` reste optionnel pour la conversion DOCX -> PDF hors Linux Docker.
 
 ```bash
 sudo apt install libreoffice tesseract-ocr
@@ -65,18 +66,18 @@ Cloner le dépôt :
 git clone https://github.com/demaslesa/les_zelles.git
 cd analyse-dce
 ```
-- Créer et activer un environnement virtuel Python :
+Create and activate a Python virtual environment:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-.\venv\Scripts\activate   # Windows
+cd backend
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+.\.venv\Scripts\activate   # Windows
+python -m pip install -U pip
+pip install -e ".[dev]"
 ```
-- Installer les dépendances backend :
 
-```bash
-pip install -r backend/requirements.txt
-```
+- Frontend dependencies stay separate for now.
 - Installer les dépendances frontend :
 
 ```bash
@@ -104,7 +105,7 @@ Ne pas committer `.env`. `.env.example` contient valeurs sûres pour démarrage 
 - Backend (FastAPI)
 
 ```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload
 ```
 - Frontend (Streamlit)
 ```bash

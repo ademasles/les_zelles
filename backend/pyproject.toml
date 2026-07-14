@@ -1,7 +1,31 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "analyse-dce-backend"
 version = "0.1.0"
+description = "Backend API for Analyse-DCE tender and CCTP document analysis"
 requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "pydantic",
+    "pydantic-settings",
+    "pymupdf",
+    "python-docx",
+    "pytesseract",
+    "Pillow",
+    "faiss-cpu",
+    "numpy",
+    "torch",
+    "sentence-transformers",
+    "sqlalchemy",
+    "requests",
+    "protobuf",
+    "docling",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -12,22 +36,31 @@ dev = [
     "mypy",
     "pre-commit",
 ]
+docx2pdf = [
+    "docx2pdf",
+]
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
 ignore = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "-q --color=yes"
+addopts = "-q"
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
 strict = false
-# TODO: workspace currently does not contain top-level `app/` package.
-# Running `mypy app` may report "Cannot find module 'app'" until package
-# added or mypy invocation adjusted. Keep checks pragmatic for now.

@@ -13,19 +13,18 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY pyproject.toml /app/pyproject.toml
+COPY . /app
 
 RUN python3.11 -m pip install --upgrade pip && \
     python3.11 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
-    python3.11 -m pip install -r requirements.txt
-
-COPY . /app
+    python3.11 -m pip install -e .
 
 RUN find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -r {} + \
  && find /app -name '*.pyc' -delete
 
 EXPOSE 8000
 
-HEALTHCHECK CMD curl --fail http://localhost:8000/ping || exit 1
+HEALTHCHECK CMD curl --fail http://localhost:8000/api/health || exit 1
 
-CMD ["python3.11", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

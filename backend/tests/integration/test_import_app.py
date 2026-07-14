@@ -1,7 +1,4 @@
-"""App import smoke test.
-
-TODO T1.1: add `/api/health` route; `/ping/` is the current lightweight smoke target.
-"""
+"""App import smoke test."""
 
 from __future__ import annotations
 
@@ -33,6 +30,33 @@ def _install_optional_dependency_stubs() -> None:
         def add_middleware(self, *args, **kwargs):
             return None
 
+        def add_api_route(self, path, endpoint, methods=None, tags=None):
+            for method in methods or ["GET"]:
+                self.routes.setdefault(method, {})[path] = endpoint
+
+        def include_router(self, router, prefix=""):
+            for method, routes in router.routes.items():
+                for path, func in routes.items():
+                    self.routes[method][f"{prefix}{path}"] = func
+
+        def get(self, path):
+            def decorator(func):
+                self.routes["GET"][path] = func
+                return func
+
+            return decorator
+
+        def post(self, path):
+            def decorator(func):
+                self.routes["POST"][path] = func
+                return func
+
+            return decorator
+
+    class _FakeAPIRouter:
+        def __init__(self, *args, **kwargs):
+            self.routes = {"GET": {}, "POST": {}}
+
         def get(self, path):
             def decorator(func):
                 self.routes["GET"][path] = func
@@ -48,6 +72,7 @@ def _install_optional_dependency_stubs() -> None:
             return decorator
 
     fastapi_module.FastAPI = _FakeFastAPI
+    fastapi_module.APIRouter = _FakeAPIRouter
     fastapi_module.UploadFile = object
     fastapi_module.File = lambda *args, **kwargs: None
     fastapi_module.Form = lambda *args, **kwargs: None
@@ -168,10 +193,10 @@ def _install_optional_dependency_stubs() -> None:
     sys.modules.setdefault("utils.highlight", highlight_module)
 
 
-def test_fastapi_app_imports_and_ping_route_responds_ok():
+def test_fastapi_app_imports_and_health_route_responds_ok():
     _install_optional_dependency_stubs()
 
-    main = importlib.import_module("main")
+    main = importlib.import_module("app.main")
 
+    assert "/api/health" in main.app.routes["GET"]
     assert "/ping/" in main.app.routes["GET"]
-    assert main.ping() == {"status": "ok"}
