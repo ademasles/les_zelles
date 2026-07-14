@@ -5,10 +5,9 @@ It integrates various components such as extraction, cleaning, chunking, summari
 It also provides endpoints for saving projects and retrieving summaries.
 """
 
-
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,24 +21,27 @@ from pydantic import BaseModel
 import fitz  # PyMuPDF
 from docx import Document
 
-# preprocessing 
+# preprocessing
 from preprocessing.extraction import extract_text_from_file
 from preprocessing.cleaning import clean_pages
 from preprocessing.chunking import chunk_text
 from preprocessing.loading import load_queries
+
 # NLP modules
 from nlp.qa import chat_llm, answer_queries
 from nlp.summarization import summarize_cctp, summarize_global
+
 # database
 from database.database import SessionLocal, Project, Query, Answer
+
 # utils
 from utils.highlight import highlight_chunk
 
 
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # INITIALISATION
-#-----------------------------------------------------------------------------------------------
-app = FastAPI() 
+# -----------------------------------------------------------------------------------------------
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,17 +51,18 @@ app.add_middleware(
 )
 
 
-
 # Stockage mémoire temporaire
 documents = {}
 query_results_store = {}
 
 # Seuil pour déclencher l'entraînement du modèle
 TRAIN_THRESHOLD = 100  # Nombre minimum de feedbacks requis pour l'entraînement
-FEEDBACK_FILE = "feedback_dataset.jsonl" # Fichier de feedbacks
-#-----------------------------------------------------------------------------------------------
+FEEDBACK_FILE = "feedback_dataset.jsonl"  # Fichier de feedbacks
+
+
+# -----------------------------------------------------------------------------------------------
 # ROUTES
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):
     """
@@ -82,7 +85,9 @@ async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):
             f.write(content)
 
         # 1. Extraction depuis les bytes
-        pages = await extract_text_from_file(content, file.filename)  # tu dois adapter cette fonction
+        pages = await extract_text_from_file(
+            content, file.filename
+        )  # tu dois adapter cette fonction
         print("Extraction OK")
 
         # 2. Segmentation + nettoyage
@@ -104,6 +109,7 @@ async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur traitement document : {e}")
 
+
 @app.post("/query/")
 async def query(doc_id: str = Form(...), question: str = Form(...)):
     """
@@ -119,7 +125,7 @@ async def query(doc_id: str = Form(...), question: str = Form(...)):
         results = list(result.values())[0]  # Récupère la seule entrée formatée
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
-    
+
     return jsonable_encoder(results)
 
 
@@ -136,12 +142,11 @@ async def run_queries(doc_id: str = Form(...)):
     try:
         questions = load_queries()
         results = answer_queries(questions, documents[doc_id])
-        query_results_store[doc_id] = results # Stocker les résultats pour le projet
+        query_results_store[doc_id] = results  # Stocker les résultats pour le projet
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
     return jsonable_encoder(results)
-
 
 
 @app.get("/summary/")
@@ -153,12 +158,13 @@ async def summary(doc_id: str):
     """
     if doc_id not in documents:
         return {"error": "Document non trouvé"}
-    all_summaries = documents[doc_id]   
+    all_summaries = documents[doc_id]
     summary = summarize_global(all_summaries, model="mistral")
     return {"summary": summary}
 
 
 from fastapi import Request
+
 
 @app.post("/save/")
 async def save_project(request: Request):
@@ -176,6 +182,7 @@ async def save_project(request: Request):
         return {"error": "doc_id, name et results sont nécessaires"}
 
     import json
+
     results = json.loads(results_json)
 
     db = SessionLocal()
@@ -192,9 +199,7 @@ async def save_project(request: Request):
     # Maintenant enregistrer les questions + réponses
     for question, result in results.items():
         new_query = Query(
-            project_id=doc_id,
-            question=question,
-            best_answer=result.get("best_answer")
+            project_id=doc_id, question=question, best_answer=result.get("best_answer")
         )
         db.add(new_query)
         db.commit()
@@ -208,7 +213,7 @@ async def save_project(request: Request):
                 summary=alt.get("summary"),
                 page_number=alt.get("page_number"),
                 chunk_id=alt.get("chunk_id"),
-                excerpt=alt.get("chunk_text")
+                excerpt=alt.get("chunk_text"),
             )
             db.add(answer)
         db.commit()
@@ -216,7 +221,6 @@ async def save_project(request: Request):
     return {"message": "Projet et questions sauvegardés avec succès"}
 
 
-        
 @app.get("/projects/")
 def get_projects():
     """
@@ -227,14 +231,17 @@ def get_projects():
     projects = db.query(Project).all()
     return [p.as_dict() for p in projects] or []
 
+
 class FeedbackEntry(BaseModel):
     """
     Model for feedback entries.
     Contains the question, response, and user score.
     """
+
     question: str
     response: str
     score: float
+
 
 @app.post("/feedback/")
 def store_feedback(entry: FeedbackEntry):
@@ -268,25 +275,28 @@ def get_project_queries(doc_id: str):
         answers = db.query(Answer).filter(Answer.query_id == query.id).all()
         alternatives = []
         for ans in answers:
-            alternatives.append({
-                "response": ans.response,
-                "score": ans.score,
-                "summary": ans.summary,
-                "page_number": ans.page_number,
-                "chunk_id": ans.chunk_id,
-                "chunk_text": ans.excerpt
-            })
+            alternatives.append(
+                {
+                    "response": ans.response,
+                    "score": ans.score,
+                    "summary": ans.summary,
+                    "page_number": ans.page_number,
+                    "chunk_id": ans.chunk_id,
+                    "chunk_text": ans.excerpt,
+                }
+            )
 
         output[query.question] = {
             "question": query.question,
             "best_answer": query.best_answer,
-            "alternatives": alternatives
+            "alternatives": alternatives,
         }
 
     return output
 
 
 from fastapi import Request
+
 
 @app.post("/project_queries/add")
 async def add_query_to_project(request: Request):
@@ -314,11 +324,7 @@ async def add_query_to_project(request: Request):
         raise HTTPException(status_code=404, detail="Projet non trouvé")
 
     # Créer la question principale
-    new_query = Query(
-        project_id=doc_id,
-        question=question,
-        best_answer=result.get("best_answer")
-    )
+    new_query = Query(project_id=doc_id, question=question, best_answer=result.get("best_answer"))
     db.add(new_query)
     db.commit()
     db.refresh(new_query)
@@ -331,7 +337,7 @@ async def add_query_to_project(request: Request):
             summary=alt.get("summary"),
             page_number=alt.get("page_number"),
             chunk_id=alt.get("chunk_id"),
-            excerpt=alt.get("chunk_text")
+            excerpt=alt.get("chunk_text"),
         )
         db.add(answer)
 
@@ -375,7 +381,8 @@ def ping():
     """
     return {"status": "ok"}
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 # Lancement de l'application
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

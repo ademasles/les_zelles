@@ -5,12 +5,11 @@ It uses SentenceTransformers for embedding and FAISS for efficient similarity se
 It also includes a function to send prompts to a local LLM API and retrieve answers.
 """
 
-
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 import requests
-from sentence_transformers import SentenceTransformer, util#, CrossEncoder
+from sentence_transformers import SentenceTransformer, util  # , CrossEncoder
 import torch
 
 from app.core.config import settings
@@ -20,9 +19,9 @@ embedding_model = SentenceTransformer(settings.embedding_model)
 url = settings.ollama_base_url
 
 
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # FONCTIONS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 def filter_chunks(summaries, query, top_k=5):
     """
     Filter text chunks based on semantic similarity to the query.
@@ -33,7 +32,7 @@ def filter_chunks(summaries, query, top_k=5):
     """
     top_k = min(top_k, len(summaries))
     query_embedding = embedding_model.encode(query, convert_to_tensor=True)
-    
+
     summary_texts = [chunk["summary"] for chunk in summaries]
     summary_embeddings = embedding_model.encode(summary_texts, convert_to_tensor=True)
 
@@ -42,14 +41,15 @@ def filter_chunks(summaries, query, top_k=5):
     # Retourner les chunks enrichis originaux avec score facultatif
     filtered = []
     for hit in hits:
-        chunk = summaries[hit['corpus_id']]
+        chunk = summaries[hit["corpus_id"]]
         chunk_with_score = chunk.copy()
         chunk_with_score["score"] = float(hit["score"])  # Ajout de la pertinence
         filtered.append(chunk_with_score)
 
     return filtered
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 def ask_llm(prompt, model=settings.llm_model, url=url):
     """
     Send a prompt to the local LLM API and return the response.
@@ -58,12 +58,8 @@ def ask_llm(prompt, model=settings.llm_model, url=url):
     :param url: The URL of the local LLM API.
     :return: The response text from the LLM.
     """
-    full_url = url.rstrip('/') + "/api/generate"
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False
-    }
+    full_url = url.rstrip("/") + "/api/generate"
+    payload = {"model": model, "prompt": prompt, "stream": False}
 
     try:
         response = requests.post(full_url, json=payload, timeout=120)
@@ -72,9 +68,12 @@ def ask_llm(prompt, model=settings.llm_model, url=url):
     except Exception as e:
         print(f"❌ Erreur en appelant Mistral : {e}")
         return None
-#-----------------------------------------------------------------------------------------------
 
-#cross_encoder = CrossEncoder("dangvantuan/CrossEncoder-camembert-large", max_length=512)
+
+# -----------------------------------------------------------------------------------------------
+
+
+# cross_encoder = CrossEncoder("dangvantuan/CrossEncoder-camembert-large", max_length=512)
 def chat_llm(question: str, summaries: list, model=settings.llm_model, top_k=5):
     """
     Interact with the LLM to answer a question based on filtered text chunks.
@@ -87,7 +86,7 @@ def chat_llm(question: str, summaries: list, model=settings.llm_model, top_k=5):
     top_k = min(top_k, len(summaries))
     # Étape 1 : filtrer les chunks les plus proches sémantiquement
     relevant_summaries = filter_chunks(summaries, question, top_k=top_k)
-    
+
     best_answer = None
     best_score = -1
     answers = {"response": [], "score": [], "chunk": []}
@@ -119,17 +118,16 @@ Réponse :
             continue
 
         if response and "ras" not in response.lower():
-
             try:
-                #score = cross_encoder.predict([(question, response)])[0]
+                # score = cross_encoder.predict([(question, response)])[0]
                 score = util.cos_sim(
-                embedding_model.encode(question, convert_to_tensor=True),
-                embedding_model.encode(response, convert_to_tensor=True)
-            ).item()
+                    embedding_model.encode(question, convert_to_tensor=True),
+                    embedding_model.encode(response, convert_to_tensor=True),
+                ).item()
             except RuntimeError as e:
                 print(f"❌ Erreur de calcul de similarité : {e}")
                 continue
-                
+
             answers["response"].append(response.strip())
             answers["score"].append(float(score))
             answers["chunk"].append(chunk)
@@ -140,7 +138,8 @@ Réponse :
 
     return best_answer or "Non trouvé", answers
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 def answer_queries(queries: dict, summaries: list, top_k=5, model=settings.llm_model):
     """
     Answer a set of queries using the provided text chunks.
@@ -155,7 +154,6 @@ def answer_queries(queries: dict, summaries: list, top_k=5, model=settings.llm_m
     for display_question, query in queries.items():
         print(f"\n🔍 Question : {display_question} ?")
 
-
         best_answer, answers = chat_llm(query, summaries, model=model, top_k=top_k)
 
         # Vérification préventive
@@ -164,11 +162,11 @@ def answer_queries(queries: dict, summaries: list, top_k=5, model=settings.llm_m
             continue
 
         items = []
-        for resp, sc, chunk in sorted(zip(
-            answers["response"],
-            answers["score"],
-            answers["chunk"]
-        ), key=lambda x: x[1], reverse=True):
+        for resp, sc, chunk in sorted(
+            zip(answers["response"], answers["score"], answers["chunk"]),
+            key=lambda x: x[1],
+            reverse=True,
+        ):
             if not chunk.get("chunk_text", "").strip():
                 continue  # évite les textes vides
 
@@ -176,24 +174,24 @@ def answer_queries(queries: dict, summaries: list, top_k=5, model=settings.llm_m
             start = min(chunk.get("start_char", 0), text_len)
             end = min(chunk.get("end_char", text_len), text_len)
 
-            items.append({
-                "response": resp,
-                "summary": chunk.get("summary", "").strip(),
-                "score": round(float(sc), 3),
-                "doc_name": chunk.get("doc_name"),
-                "page_number": chunk.get("page_number"),
-                "chunk_id": chunk.get("chunk_id"),
-                "excerpt": chunk.get("chunk_text", "").strip(),
-                "start_char": start,
-                "end_char": end
-            })
-
+            items.append(
+                {
+                    "response": resp,
+                    "summary": chunk.get("summary", "").strip(),
+                    "score": round(float(sc), 3),
+                    "doc_name": chunk.get("doc_name"),
+                    "page_number": chunk.get("page_number"),
+                    "chunk_id": chunk.get("chunk_id"),
+                    "excerpt": chunk.get("chunk_text", "").strip(),
+                    "start_char": start,
+                    "end_char": end,
+                }
+            )
 
         results[display_question] = {
             "question": display_question,
             "best_answer": best_answer,
-            "alternatives": items
+            "alternatives": items,
         }
 
     return results
-

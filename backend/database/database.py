@@ -7,13 +7,10 @@ Includes models for:
 - Answer: AI responses (including alternatives)
 """
 
-
 # -----------------------------------------------------------------------------------------------
 # IMPORTS
 # -----------------------------------------------------------------------------------------------
-from sqlalchemy import (
-    create_engine, Column, String, Text, DateTime, ForeignKey, Float, Integer
-)
+from sqlalchemy import create_engine, Column, String, Text, DateTime, ForeignKey, Float, Integer
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime, timezone
@@ -38,8 +35,10 @@ Base = declarative_base()
 # MODELS
 # -----------------------------------------------------------------------------------------------
 
+
 class Project(Base):
     """Project containing uploaded document information and summary."""
+
     __tablename__ = "projects"
 
     id = Column(String, primary_key=True, index=True)  # doc_id
@@ -57,7 +56,6 @@ class Project(Base):
         :return: Dictionary representation of the project.
         """
 
-
         return {
             "id": self.id,
             "name": self.name,
@@ -69,6 +67,7 @@ class Project(Base):
 
 class Query(Base):
     """User-defined question for a project."""
+
     __tablename__ = "queries"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -83,6 +82,7 @@ class Query(Base):
 
 class Answer(Base):
     """Individual AI-generated answer (alternative) for a query."""
+
     __tablename__ = "answers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -97,6 +97,7 @@ class Answer(Base):
 
     # Relation
     query = relationship("Query", back_populates="answers")
+
 
 # -----------------------------------------------------------------------------------------------
 # INITIALIZE

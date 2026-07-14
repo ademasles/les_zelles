@@ -5,19 +5,20 @@ while preserving context and structure.
 """
 # SPDX-FileCopyrightText: 2025 Anton Demasles <
 
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 import re
 
 from app.core.config import settings
 
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # FUNCTIONS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 import re
 
 MAX_CHARS = settings.chunk_max_chars
+
 
 def chunk_text(pages, max_chars=MAX_CHARS):
     """
@@ -34,8 +35,8 @@ def chunk_text(pages, max_chars=MAX_CHARS):
         page_number = page_data.get("page_number", None)
 
         # Découpe par phrases
-        sentences = re.split(r'(?<=[.?!])\s+', text)
-        
+        sentences = re.split(r"(?<=[.?!])\s+", text)
+
         chunk_text = ""
         start_char = 0
         chunk_start_offset = 0
@@ -47,15 +48,17 @@ def chunk_text(pages, max_chars=MAX_CHARS):
                 chunk_text += sentence + " "
             else:
                 chunk_end_offset = chunk_start_offset + len(chunk_text.strip())
-                all_chunks.append({
-                    "chunk_id": chunk_counter,
-                    "text": chunk_text.strip(),
-                    "doc_name": doc_name,
-                    "page_number": page_number,
-                    "start_char": chunk_start_offset,
-                    "end_char": chunk_end_offset,
-                    "raw_text": text
-                })
+                all_chunks.append(
+                    {
+                        "chunk_id": chunk_counter,
+                        "text": chunk_text.strip(),
+                        "doc_name": doc_name,
+                        "page_number": page_number,
+                        "start_char": chunk_start_offset,
+                        "end_char": chunk_end_offset,
+                        "raw_text": text,
+                    }
+                )
                 # Nouveau chunk
                 chunk_counter += 1
                 start_char = chunk_end_offset
@@ -65,15 +68,17 @@ def chunk_text(pages, max_chars=MAX_CHARS):
         # Dernier chunk de la page
         if chunk_text.strip():
             chunk_end_offset = chunk_start_offset + len(chunk_text.strip())
-            all_chunks.append({
-                "chunk_id": chunk_counter,
-                "text": chunk_text.strip(),
-                "doc_name": doc_name,
-                "page_number": page_number,
-                "start_char": chunk_start_offset,
-                "end_char": chunk_end_offset,
-                "raw_text": text
-            })
+            all_chunks.append(
+                {
+                    "chunk_id": chunk_counter,
+                    "text": chunk_text.strip(),
+                    "doc_name": doc_name,
+                    "page_number": page_number,
+                    "start_char": chunk_start_offset,
+                    "end_char": chunk_end_offset,
+                    "raw_text": text,
+                }
+            )
             chunk_counter += 1
 
     return all_chunks

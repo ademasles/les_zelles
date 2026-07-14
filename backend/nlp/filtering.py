@@ -5,10 +5,9 @@ It uses SentenceTransformers for embedding and FAISS for efficient similarity se
 It also includes a function to send prompts to a local LLM API and retrieve answers.
 """
 
-
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 from sentence_transformers import SentenceTransformer, util
 
 from app.core.config import settings
@@ -16,9 +15,10 @@ from app.core.config import settings
 # Chargement du modèle d'embeddings
 embedding_model = SentenceTransformer(settings.embedding_model)
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 # FONCTIONS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 def filter_chunks(summaries, query, top_k=5):
     """
     Filter text chunks based on semantic similarity to the query.
@@ -28,7 +28,7 @@ def filter_chunks(summaries, query, top_k=5):
     :return: List of filtered chunks with their scores.
     """
     query_embedding = embedding_model.encode(query, convert_to_tensor=True)
-    
+
     summary_texts = [chunk["summary"] for chunk in summaries]
     summary_embeddings = embedding_model.encode(summary_texts, convert_to_tensor=True)
 
@@ -37,7 +37,7 @@ def filter_chunks(summaries, query, top_k=5):
     # Retourner les chunks enrichis originaux avec score facultatif
     filtered = []
     for hit in hits:
-        chunk = summaries[hit['corpus_id']]
+        chunk = summaries[hit["corpus_id"]]
         chunk_with_score = chunk.copy()
         chunk_with_score["score"] = float(hit["score"])  # Ajout de la pertinence
         filtered.append(chunk_with_score)

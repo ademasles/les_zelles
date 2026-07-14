@@ -5,9 +5,9 @@ It uses the `pymupdf` library for PDF handling, `python-docx` for DOCX files, an
 """
 # SPDX-FileCopyrightText: 2025 Anton Demasles <
 
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 import asyncio
 import fitz  # pymupdf
 from docx import Document
@@ -18,9 +18,10 @@ from typing import List, Dict, Union
 
 from app.core.config import settings
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 # FUNCTIONS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 async def extract_text_from_file(content: bytes, filename) -> List[Dict[str, Union[str, int]]]:
     """
     Extract text from a file based on its type.
@@ -38,12 +39,11 @@ async def extract_text_from_file(content: bytes, filename) -> List[Dict[str, Uni
     elif filename.lower().endswith((".png", ".jpg", ".jpeg", ".tiff")):
         return await loop.run_in_executor(None, extract_text_image, content, filename)
     else:
-        return [{
-            "doc_name": filename,
-            "page_number": None,
-            "text": content.decode('utf-8')
-        }]
-#-----------------------------------------------------------------------------------------------
+        return [{"doc_name": filename, "page_number": None, "text": content.decode("utf-8")}]
+
+
+# -----------------------------------------------------------------------------------------------
+
 
 def extract_text_pdf(
     data: bytes,
@@ -67,21 +67,21 @@ def extract_text_pdf(
                 img = Image.open(io.BytesIO(pix.tobytes()))
                 text = pytesseract.image_to_string(img, lang=settings.tesseract_lang)
 
-            results.append({
-                "doc_name": filename,
-                "page_number": page_number,
-                "text": text
-            })
+            results.append({"doc_name": filename, "page_number": page_number, "text": text})
     except Exception as e:
-        results.append({
-            "doc_name": filename,
-            "page_number": None,
-            "text": f"[Erreur lors de l'extraction : {str(e)}]"
-        })
+        results.append(
+            {
+                "doc_name": filename,
+                "page_number": None,
+                "text": f"[Erreur lors de l'extraction : {str(e)}]",
+            }
+        )
 
     return results
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
+
 
 def extract_text_docx(data, filename="unknown.docx"):
     """
@@ -94,13 +94,10 @@ def extract_text_docx(data, filename="unknown.docx"):
     texts = [para.text for para in doc.paragraphs if para.text.strip()]
     full_text = "\n".join(texts)
 
-    return [{
-        "doc_name": filename,
-        "page_number": None,
-        "text": full_text
-    }]
+    return [{"doc_name": filename, "page_number": None, "text": full_text}]
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 def extract_text_image(data, filename="image.jpg"):
     """
     Extract text from an image file using OCR.
@@ -111,8 +108,4 @@ def extract_text_image(data, filename="image.jpg"):
     image = Image.open(io.BytesIO(data))
     text = pytesseract.image_to_string(image, lang=settings.tesseract_lang)
 
-    return [{
-        "doc_name": filename,
-        "page_number": None,
-        "text": text
-    }]
+    return [{"doc_name": filename, "page_number": None, "text": text}]

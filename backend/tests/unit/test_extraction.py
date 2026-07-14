@@ -32,6 +32,4 @@ def test_extract_text_from_file_falls_back_to_utf8_text():
     extraction = importlib.import_module("preprocessing.extraction")
     result = asyncio.run(extraction.extract_text_from_file(b"Bonjour le monde", "note.txt"))
 
-    assert result == [
-        {"doc_name": "note.txt", "page_number": None, "text": "Bonjour le monde"}
-    ]
+    assert result == [{"doc_name": "note.txt", "page_number": None, "text": "Bonjour le monde"}]

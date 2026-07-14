@@ -3,10 +3,9 @@
 This module provides functions to summarize text chunks using a language model and to generate global summaries.
 """
 
-
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 # IMPORTS
-#-----------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------
 import requests
 
 from app.core.config import settings
@@ -38,12 +37,7 @@ def summarize_chunk(chunk, model=settings.llm_model, url=url):
     {chunk["text"]}
     """.strip()
 
-
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False
-    }
+    payload = {"model": model, "prompt": prompt, "stream": False}
 
     try:
         response = requests.post(full_url, json=payload)
@@ -53,7 +47,8 @@ def summarize_chunk(chunk, model=settings.llm_model, url=url):
         print(f"❌ Erreur appel Mistral : {e}")
         return "Erreur"
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 def summarize_cctp(chunks, verbose=True, model=settings.llm_model):
     """
     Summarize a list of text chunks into a coherent summary.
@@ -65,23 +60,28 @@ def summarize_cctp(chunks, verbose=True, model=settings.llm_model):
     all_summaries = []
     for i, chunk in enumerate(chunks):
         if verbose:
-            print(f"📄 Résumé du chunk {i+1}/{len(chunks)} - page {chunk.get('page_number', '?')}...")
-        
+            print(
+                f"📄 Résumé du chunk {i + 1}/{len(chunks)} - page {chunk.get('page_number', '?')}..."
+            )
+
         summary = summarize_chunk(chunk)  # Fonction que tu as déjà
         if summary and summary.strip().lower() not in ["non pertinent", "erreur"]:
-            all_summaries.append({
-                "doc_name": chunk["doc_name"],
-                "chunk_id": chunk.get("chunk_id"),
-                "page_number": chunk["page_number"],
-                "summary": summary.strip(),
-                "start_char": chunk.get("start_char"),
-                "end_char": chunk.get("end_char"),
-                "chunk_text": chunk["raw_text"]
-            })
+            all_summaries.append(
+                {
+                    "doc_name": chunk["doc_name"],
+                    "chunk_id": chunk.get("chunk_id"),
+                    "page_number": chunk["page_number"],
+                    "summary": summary.strip(),
+                    "start_char": chunk.get("start_char"),
+                    "end_char": chunk.get("end_char"),
+                    "chunk_text": chunk["raw_text"],
+                }
+            )
 
     return all_summaries
 
-#-----------------------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------------------
 def summarize_global(all_summaries, model=settings.llm_model):
     """
     Generate a global summary from all summarized chunks.
@@ -91,5 +91,3 @@ def summarize_global(all_summaries, model=settings.llm_model):
     """
     text = "\n".join([s["summary"] for s in all_summaries])
     return summarize_chunk({"text": text}, model=model)
-
-
