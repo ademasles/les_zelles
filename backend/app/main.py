@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.api.routes.health import health_check
+from app.core.config import settings
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:

@@ -10,6 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "local"
+    app_title: str = "Analyse-DCE API"
     debug: bool = False
 
     database_url: str = "sqlite:///./data/analyse_dce.db"
