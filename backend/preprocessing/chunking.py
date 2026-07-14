@@ -10,12 +10,14 @@ while preserving context and structure.
 #-----------------------------------------------------------------------------------------------
 import re
 
+from app.core.config import settings
+
 #-----------------------------------------------------------------------------------------------
 # FUNCTIONS
 #-----------------------------------------------------------------------------------------------
 import re
 
-MAX_CHARS = 3000
+MAX_CHARS = settings.chunk_max_chars
 
 def chunk_text(pages, max_chars=MAX_CHARS):
     """

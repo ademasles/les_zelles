@@ -8,12 +8,13 @@ This module provides functions to summarize text chunks using a language model a
 # IMPORTS
 #-----------------------------------------------------------------------------------------------
 import requests
-import os
 
-url = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+from app.core.config import settings
+
+url = settings.ollama_base_url
 
 
-def summarize_chunk(chunk, model="mistral", url=url):
+def summarize_chunk(chunk, model=settings.llm_model, url=url):
     """
     Summarize a single text chunk using a language model.
     :param chunk: Dictionary containing the text chunk to summarize.
@@ -53,7 +54,7 @@ def summarize_chunk(chunk, model="mistral", url=url):
         return "Erreur"
 
 #-----------------------------------------------------------------------------------------------
-def summarize_cctp(chunks, verbose=True, model="mistral"):
+def summarize_cctp(chunks, verbose=True, model=settings.llm_model):
     """
     Summarize a list of text chunks into a coherent summary.
     :param chunks: List of dictionaries containing text chunks to summarize.
@@ -81,7 +82,7 @@ def summarize_cctp(chunks, verbose=True, model="mistral"):
     return all_summaries
 
 #-----------------------------------------------------------------------------------------------
-def summarize_global(all_summaries, model="mistral"):
+def summarize_global(all_summaries, model=settings.llm_model):
     """
     Generate a global summary from all summarized chunks.
     :param all_summaries: List of dictionaries containing summarized chunks.

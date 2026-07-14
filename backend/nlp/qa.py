@@ -11,12 +11,13 @@ It also includes a function to send prompts to a local LLM API and retrieve answ
 #-----------------------------------------------------------------------------------------------
 import requests
 from sentence_transformers import SentenceTransformer, util#, CrossEncoder
-import os
 import torch
-MAX_CONTEXT_TOKENS = 3000
-#embedding_model = SentenceTransformer('dangvantuan/sentence-camembert-large')
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-url = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+
+from app.core.config import settings
+
+MAX_CONTEXT_TOKENS = settings.max_context_tokens
+embedding_model = SentenceTransformer(settings.embedding_model)
+url = settings.ollama_base_url
 
 
 #-----------------------------------------------------------------------------------------------
@@ -49,7 +50,7 @@ def filter_chunks(summaries, query, top_k=5):
     return filtered
 
 #-----------------------------------------------------------------------------------------------
-def ask_llm(prompt, model="mistral", url=url):
+def ask_llm(prompt, model=settings.llm_model, url=url):
     """
     Send a prompt to the local LLM API and return the response.
     :param prompt: The text prompt to send to the LLM.
@@ -74,7 +75,7 @@ def ask_llm(prompt, model="mistral", url=url):
 #-----------------------------------------------------------------------------------------------
 
 #cross_encoder = CrossEncoder("dangvantuan/CrossEncoder-camembert-large", max_length=512)
-def chat_llm(question: str, summaries: list, model="mistral", top_k=5):
+def chat_llm(question: str, summaries: list, model=settings.llm_model, top_k=5):
     """
     Interact with the LLM to answer a question based on filtered text chunks.
     :param question: The question to ask the LLM.
@@ -140,7 +141,7 @@ Réponse :
     return best_answer or "Non trouvé", answers
 
 #-----------------------------------------------------------------------------------------------
-def answer_queries(queries: dict, summaries: list, top_k=5, model="mistral"):
+def answer_queries(queries: dict, summaries: list, top_k=5, model=settings.llm_model):
     """
     Answer a set of queries using the provided text chunks.
     :param queries: Dictionary of queries where keys are query IDs and values are display questions.

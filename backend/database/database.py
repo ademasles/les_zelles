@@ -17,11 +17,18 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime, timezone
+from pathlib import Path
+
+from app.core.config import settings
 
 # -----------------------------------------------------------------------------------------------
 # CONFIGURATION
 # -----------------------------------------------------------------------------------------------
-DATABASE_URL = "sqlite:///./projects.db"
+DATABASE_URL = settings.database_url
+
+if DATABASE_URL.startswith("sqlite:///"):
+    sqlite_path = Path(DATABASE_URL.removeprefix("sqlite:///"))
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

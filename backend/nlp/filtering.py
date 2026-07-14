@@ -11,8 +11,10 @@ It also includes a function to send prompts to a local LLM API and retrieve answ
 #-----------------------------------------------------------------------------------------------
 from sentence_transformers import SentenceTransformer, util
 
+from app.core.config import settings
+
 # Chargement du modèle d'embeddings
-embedding_model = SentenceTransformer('dangvantuan/sentence-camembert-large')
+embedding_model = SentenceTransformer(settings.embedding_model)
 
 #-----------------------------------------------------------------------------------------------
 # FONCTIONS

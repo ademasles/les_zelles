@@ -16,6 +16,8 @@ from PIL import Image
 import io
 from typing import List, Dict, Union
 
+from app.core.config import settings
+
 #-----------------------------------------------------------------------------------------------
 # FUNCTIONS
 #-----------------------------------------------------------------------------------------------
@@ -43,7 +45,11 @@ async def extract_text_from_file(content: bytes, filename) -> List[Dict[str, Uni
         }]
 #-----------------------------------------------------------------------------------------------
 
-def extract_text_pdf(data: bytes, filename="unknown.pdf", use_ocr_fallback=False) -> List[Dict[str, Union[str, int]]]:
+def extract_text_pdf(
+    data: bytes,
+    filename="unknown.pdf",
+    use_ocr_fallback=settings.enable_ocr,
+) -> List[Dict[str, Union[str, int]]]:
     """
     Extract text from a PDF file, optionally using OCR for pages without text.
     :param data: PDF file content as bytes.
@@ -59,7 +65,7 @@ def extract_text_pdf(data: bytes, filename="unknown.pdf", use_ocr_fallback=False
             if not text and use_ocr_fallback:
                 pix = page.get_pixmap(dpi=300)
                 img = Image.open(io.BytesIO(pix.tobytes()))
-                text = pytesseract.image_to_string(img, lang='fra')
+                text = pytesseract.image_to_string(img, lang=settings.tesseract_lang)
 
             results.append({
                 "doc_name": filename,
@@ -103,7 +109,7 @@ def extract_text_image(data, filename="image.jpg"):
     :return: List of dictionaries with document name, page number, and extracted text.
     """
     image = Image.open(io.BytesIO(data))
-    text = pytesseract.image_to_string(image, lang='fra')
+    text = pytesseract.image_to_string(image, lang=settings.tesseract_lang)
 
     return [{
         "doc_name": filename,

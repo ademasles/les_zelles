@@ -9,10 +9,11 @@
 from sentence_transformers import CrossEncoder, InputExample
 from torch.utils.data import DataLoader
 import json
-import os
 
-FEEDBACK_FILE = "feedback_dataset.jsonl"
-MODEL_OUTPUT_DIR = "models/crossencoder_finetuned"
+from app.core.config import settings
+
+FEEDBACK_FILE = settings.feedback_file
+MODEL_OUTPUT_DIR = settings.cross_encoder_output_dir
 
 
 #-----------------------------------------------------------------------------------------------
@@ -37,13 +38,13 @@ def train():
     """
     print("📚 Chargement des feedbacks...")
     data = load_feedback_data()
-    model = CrossEncoder("dangvantuan/CrossEncoder-camembert-large", num_labels=1)
+    model = CrossEncoder(settings.cross_encoder_model, num_labels=1)
 
     loader = DataLoader(data, shuffle=True, batch_size=8)
     model.fit(train_dataloader=loader, epochs=1)
 
     print(f"💾 Sauvegarde dans {MODEL_OUTPUT_DIR}")
-    model.save(MODEL_OUTPUT_DIR)
+    model.save(str(MODEL_OUTPUT_DIR))
 
 if __name__ == "__main__":
     train()
