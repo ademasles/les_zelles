@@ -10,7 +10,6 @@ It also includes a function to send prompts to a local LLM API and retrieve answ
 # -----------------------------------------------------------------------------------------------
 import requests
 from sentence_transformers import SentenceTransformer, util  # , CrossEncoder
-import torch
 
 from app.core.config import settings
 
@@ -112,7 +111,7 @@ Réponse :
 
         try:
             response = ask_llm(prompt, model=model)
-            print(f"Réponse LLM OK")
+            print("Réponse LLM OK")
         except Exception as e:
             print(f"❌ Erreur LLM : {e}")
             continue

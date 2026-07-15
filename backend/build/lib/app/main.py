@@ -11,7 +11,6 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from app.core.config import settings
 from app.api.routes.health import health_check
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -27,7 +26,7 @@ def create_app() -> FastAPI:
     if not any(getattr(route, "path", None) == "/api/health" for route in app.routes):
         app.add_api_route("/api/health", health_check, methods=["GET"], tags=["health"])
 
-    app.title = settings.app_title
+    app.title = "Analyse-DCE API"
     return app
 
 

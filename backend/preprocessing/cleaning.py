@@ -11,7 +11,6 @@ It also handles Unicode normalization and standard text cleaning.
 # -----------------------------------------------------------------------------------------------
 import re
 import unicodedata
-from typing import List, Dict, Union
 
 
 # -----------------------------------------------------------------------------------------------
@@ -61,7 +60,7 @@ def clean_text(text: str) -> str:
 
 
 # -----------------------------------------------------------------------------------------------
-def clean_pages(pages: List[Dict[str, Union[str, int]]]) -> List[Dict[str, Union[str, int]]]:
+def clean_pages(pages: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
     """
     Clean the text in each page of the extracted text.
     :param pages: List of dictionaries with document name, page number, and extracted text.

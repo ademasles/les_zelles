@@ -8,9 +8,9 @@ It uses the `json` library to read the file and parse its content.
 # -----------------------------------------------------------------------------------------------
 # IMPORTS
 # -----------------------------------------------------------------------------------------------
-from typing import Dict, Any, Union, List
 import json
 from pathlib import Path
+from typing import Any
 
 from app.core.config import settings
 
@@ -19,8 +19,8 @@ from app.core.config import settings
 # FUNCTIONS
 # -----------------------------------------------------------------------------------------------
 def load_queries(
-    path: Union[str, Path] = settings.queries_path,
-) -> Dict[str, Union[str, List[str], Dict[str, Any]]]:
+    path: str | Path = settings.queries_path,
+) -> dict[str, str | list[str] | dict[str, Any]]:
     """
     Load queries from a JSON file.
     :param path: Path to the JSON file containing queries.

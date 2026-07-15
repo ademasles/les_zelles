@@ -4,9 +4,10 @@
 # -----------------------------------------------------------------------------------------------
 # IMPORTS
 # -----------------------------------------------------------------------------------------------
+import json
+
 from sentence_transformers import CrossEncoder, InputExample
 from torch.utils.data import DataLoader
-import json
 
 from app.core.config import settings
 
@@ -23,7 +24,7 @@ def load_feedback_data():
     :return: List of InputExample objects.
     """
     examples = []
-    with open(FEEDBACK_FILE, "r", encoding="utf-8") as f:
+    with open(FEEDBACK_FILE, encoding="utf-8") as f:
         for line in f:
             entry = json.loads(line)
             examples.append(

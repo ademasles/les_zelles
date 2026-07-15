@@ -10,11 +10,12 @@ Includes models for:
 # -----------------------------------------------------------------------------------------------
 # IMPORTS
 # -----------------------------------------------------------------------------------------------
-from sqlalchemy import create_engine, Column, String, Text, DateTime, ForeignKey, Float, Integer
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
 
 from app.core.config import settings
 
@@ -43,7 +44,7 @@ class Project(Base):
 
     id = Column(String, primary_key=True, index=True)  # doc_id
     name = Column(String)
-    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(UTC))
     summary = Column(Text)
     csv = Column(Text)
 

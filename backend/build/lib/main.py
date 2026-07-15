@@ -19,8 +19,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from app.core.config import settings
-
 # database
 from database.database import Answer, Project, Query, SessionLocal
 
@@ -55,8 +53,8 @@ documents = {}
 query_results_store = {}
 
 # Seuil pour déclencher l'entraînement du modèle
-TRAIN_THRESHOLD = settings.train_threshold  # Nombre minimum de feedbacks requis pour l'entraînement
-FEEDBACK_FILE = settings.feedback_file  # Fichier de feedbacks
+TRAIN_THRESHOLD = 100  # Nombre minimum de feedbacks requis pour l'entraînement
+FEEDBACK_FILE = "feedback_dataset.jsonl"  # Fichier de feedbacks
 
 
 # -----------------------------------------------------------------------------------------------
@@ -78,9 +76,9 @@ async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):
         content = await file.read()
 
         # Sauvegarde du fichier original
-        folder = settings.storage_dir / doc_id
-        folder.mkdir(parents=True, exist_ok=True)
-        with open(folder / "original.pdf", "wb") as f:
+        folder = f"data/{doc_id}"
+        os.makedirs(folder, exist_ok=True)
+        with open(f"{folder}/original.pdf", "wb") as f:
             f.write(content)
 
         # 1. Extraction depuis les bytes
@@ -158,7 +156,7 @@ async def summary(doc_id: str):
     if doc_id not in documents:
         return {"error": "Document non trouvé"}
     all_summaries = documents[doc_id]
-    summary = summarize_global(all_summaries, model=settings.llm_model)
+    summary = summarize_global(all_summaries, model="mistral")
     return {"summary": summary}
 
 
@@ -350,7 +348,7 @@ def trigger_training():
     Trigger the training of the CrossEncoder model using stored feedback data.
     :return: A message indicating the training status.
     """
-    if not FEEDBACK_FILE.exists():
+    if not os.path.exists(FEEDBACK_FILE):
         return {"status": "no_feedback_file"}
 
     with open(FEEDBACK_FILE, encoding="utf-8") as f:

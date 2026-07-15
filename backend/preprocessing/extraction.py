@@ -9,12 +9,12 @@ It uses the `pymupdf` library for PDF handling, `python-docx` for DOCX files, an
 # IMPORTS
 # -----------------------------------------------------------------------------------------------
 import asyncio
-import fitz  # pymupdf
-from docx import Document
-import pytesseract
-from PIL import Image
 import io
-from typing import List, Dict, Union
+
+import fitz  # pymupdf
+import pytesseract
+from docx import Document
+from PIL import Image
 
 from app.core.config import settings
 
@@ -22,7 +22,7 @@ from app.core.config import settings
 # -----------------------------------------------------------------------------------------------
 # FUNCTIONS
 # -----------------------------------------------------------------------------------------------
-async def extract_text_from_file(content: bytes, filename) -> List[Dict[str, Union[str, int]]]:
+async def extract_text_from_file(content: bytes, filename) -> list[dict[str, str | int]]:
     """
     Extract text from a file based on its type.
     :param content: File content as bytes.
@@ -49,7 +49,7 @@ def extract_text_pdf(
     data: bytes,
     filename="unknown.pdf",
     use_ocr_fallback=settings.enable_ocr,
-) -> List[Dict[str, Union[str, int]]]:
+) -> list[dict[str, str | int]]:
     """
     Extract text from a PDF file, optionally using OCR for pages without text.
     :param data: PDF file content as bytes.
