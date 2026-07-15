@@ -220,17 +220,6 @@ async def save_project(request: Request):
     return {"message": "Projet et questions sauvegardés avec succès"}
 
 
-@app.get("/projects/")
-def get_projects():
-    """
-    Retrieve all saved projects.
-    :return: A list of all projects.
-    """
-    db = SessionLocal()
-    projects = db.query(Project).all()
-    return [p.as_dict() for p in projects] or []
-
-
 class FeedbackEntry(BaseModel):
     """
     Model for feedback entries.
@@ -253,95 +242,6 @@ def store_feedback(entry: FeedbackEntry):
         json.dump(entry.dict(), f)
         f.write("\n")
     return {"status": "ok"}
-
-
-@app.get("/project_queries/{doc_id}")
-def get_project_queries(doc_id: str):
-    """
-    Retrieve all questions and answers for a given project.
-    :param doc_id: Unique identifier for the project.
-    :return: Dictionary of query_label: query_result
-    """
-    db = SessionLocal()
-    project = db.query(Project).filter(Project.id == doc_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Projet non trouvé")
-
-    queries = db.query(Query).filter(Query.project_id == doc_id).all()
-    output = {}
-
-    for query in queries:
-        answers = db.query(Answer).filter(Answer.query_id == query.id).all()
-        alternatives = []
-        for ans in answers:
-            alternatives.append(
-                {
-                    "response": ans.response,
-                    "score": ans.score,
-                    "summary": ans.summary,
-                    "page_number": ans.page_number,
-                    "chunk_id": ans.chunk_id,
-                    "chunk_text": ans.excerpt,
-                }
-            )
-
-        output[query.question] = {
-            "question": query.question,
-            "best_answer": query.best_answer,
-            "alternatives": alternatives,
-        }
-
-    return output
-
-
-from fastapi import Request
-
-
-@app.post("/project_queries/add")
-async def add_query_to_project(request: Request):
-    """
-    Add a user-defined question and its AI-generated answers to a project.
-    :param request: The request containing the project ID, question, and result JSON.
-    :return: A message indicating the question has been added to the project.
-    """
-    form_data = await request.form()
-    doc_id = form_data.get("doc_id")
-    question = form_data.get("question")
-    result_json = form_data.get("result")
-
-    if not all([doc_id, question, result_json]):
-        raise HTTPException(status_code=400, detail="Requête incomplète")
-
-    try:
-        result = json.loads(result_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="JSON mal formé dans result")
-
-    db = SessionLocal()
-    project = db.query(Project).filter(Project.id == doc_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Projet non trouvé")
-
-    # Créer la question principale
-    new_query = Query(project_id=doc_id, question=question, best_answer=result.get("best_answer"))
-    db.add(new_query)
-    db.commit()
-    db.refresh(new_query)
-
-    for alt in result.get("alternatives", []):
-        answer = Answer(
-            query_id=new_query.id,
-            response=alt.get("response"),
-            score=alt.get("score"),
-            summary=alt.get("summary"),
-            page_number=alt.get("page_number"),
-            chunk_id=alt.get("chunk_id"),
-            excerpt=alt.get("chunk_text"),
-        )
-        db.add(answer)
-
-    db.commit()
-    return {"message": f"✅ Question '{question}' ajoutée au projet {doc_id}"}
 
 
 @app.post("/train/")

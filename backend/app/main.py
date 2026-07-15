@@ -13,6 +13,8 @@ from fastapi import FastAPI
 
 from app.core.config import settings
 from app.api.routes.health import health_check
+from app.api.routes.summaries import router as summaries_router
+from app.api.routes.projects import router as projects_router
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -26,6 +28,9 @@ def create_app() -> FastAPI:
 
     if not any(getattr(route, "path", None) == "/api/health" for route in app.routes):
         app.add_api_route("/api/health", health_check, methods=["GET"], tags=["health"])
+
+    app.include_router(summaries_router)
+    app.include_router(projects_router)
 
     app.title = settings.app_title
     return app
