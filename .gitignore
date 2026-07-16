@@ -74,6 +74,15 @@ logs/
 .ipynb_checkpoints/
 
 # ==============================================================================
+# OpenCode AI Agent
+# ==============================================================================
+# Ignore generated plan files from 'plan' mode
+.opencode/plans/
+
+# (Optional) Ignore local session history/cache if generated
+.opencode/cache/
+
+# ==============================================================================
 # OS Specific
 # ==============================================================================
 # macOS
