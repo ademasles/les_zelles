@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     app_title: str = "Analyse-DCE API"
     debug: bool = False
 
-    database_url: str = "sqlite:///./data/analyse_dce.db"
+    database_url: str = "sqlite+aiosqlite:///./data/analyse_dce.db"
     storage_dir: Path = Path("./data/storage")
 
     parser_default: str = "docling"

@@ -11,13 +11,16 @@ app/api/__init__.py
 app/api/routes/__init__.py
 app/api/routes/documents.py
 app/api/routes/health.py
+app/api/routes/projects.py
 app/api/routes/summaries.py
 app/core/__init__.py
 app/core/config.py
 app/database/__init__.py
+app/database/base.py
+app/database/session.py
 app/llm/__init__.py
+app/models/__init__.py
 app/preprocessing/__init__.py
 app/rag/__init__.py
 app/services/__init__.py
-app/storage/__init__.py
 app/utils/__init__.py
