@@ -1,6 +1,8 @@
 """API client for Streamlit frontend — centralized HTTP calls to the backend.
 
 This is a standalone module. It does NOT import from the backend package.
+
+Defaults to localhost for local dev. Override via BACKEND_URL env var.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from typing import Any
 
 import requests
 
-API_URL = os.environ.get("BACKEND_URL", "http://backend:8000").rstrip("/")
+API_URL = os.environ.get("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 
 def health() -> dict[str, str]:
