@@ -1,0 +1,53 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths: ["backend/**"]
+  push:
+    branches: [main]
+    paths: ["backend/**"]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-fra
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/pyproject.toml') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff check)
+        run: ruff check .
+
+      - name: Format check (ruff format)
+        run: ruff format --check .
+
+      - name: Type check (mypy)
+        run: mypy app
+
+      - name: Unit + golden + regression tests
+        run: pytest tests/ -v --ignore=tests/integration --cov=app --cov-report=term-missing
+
+      - name: Integration tests (stubbed)
+        run: pytest tests/integration/ -v

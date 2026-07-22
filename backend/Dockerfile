@@ -1,30 +1,30 @@
-# Dockerfile for the Analyse DCE Backend
-# This Dockerfile sets up a Python environment with necessary dependencies for the backend service.
+# Dockerfile for the Analyse-DCE Backend
+# Uses a slim Python base with system deps for OCR.
+# .env is NOT baked into the image — it's mounted at runtime.
 
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM python:3.11-slim
 
+ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
-    apt-get install -y python3.11 python3.11-venv python3-pip build-essential \
-    git cmake libtesseract-dev tesseract-ocr tesseract-ocr-fra \
-    poppler-utils curl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-fra \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY pyproject.toml /app/pyproject.toml
-COPY . /app
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir -e . && \
+    find /usr/local -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-RUN python3.11 -m pip install --upgrade pip && \
-    python3.11 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
-    python3.11 -m pip install -e .
-
-RUN find /usr/local/lib/python3.11 -type d -name __pycache__ -exec rm -r {} + \
- && find /app -name '*.pyc' -delete
+COPY . .
 
 EXPOSE 8000
 
-HEALTHCHECK CMD curl --fail http://localhost:8000/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl --fail http://localhost:8000/api/health || exit 1
 
-CMD ["python3.11", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

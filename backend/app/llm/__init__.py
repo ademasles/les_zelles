@@ -1,1 +1,1 @@
-"""LLM package for Analyse-DCE backend."""
+"""LLM client interface."""

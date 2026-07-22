@@ -1,1 +1,1 @@
-"""Service layer package for Analyse-DCE backend."""
+"""Services package for Analyse-DCE backend."""

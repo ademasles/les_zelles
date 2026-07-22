@@ -15,10 +15,11 @@ async def get_summary(doc_id: str):
     Wraps legacy: GET /summary/{doc_id} → summarize_global()
     """
     # Import legacy function at call time to avoid circular imports
-    from nlp.summarization import summarize_global
     from core.config import settings
     from db.database import SessionLocal
     from sqlalchemy import text
+
+    from nlp.summarization import summarize_global
 
     try:
         # Get project ID from the filename

@@ -30,6 +30,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "alembic",
     "pytest",
     "pytest-cov",
     "httpx",
@@ -60,6 +61,9 @@ ignore = []
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-q"
+markers = [
+    "llm: marks tests that require a live Ollama instance (skipped by default)",
+]
 
 [tool.mypy]
 python_version = "3.11"

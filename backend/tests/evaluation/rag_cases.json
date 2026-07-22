@@ -1,0 +1,37 @@
+[
+  {
+    "id": "case_001",
+    "question": "Quel est le classement AEV des menuiseries ?",
+    "expected_evidence": ["Classement AEV", "A4", "E9A"],
+    "expected_quality": "strong",
+    "chunk_text": "### 2.1 Classement AEV\n\n| Classement | Valeur |\n|------------|--------|\n| A*E*V | A4 E9A V* |\n| Perméabilité à l'air | Classe 4 |"
+  },
+  {
+    "id": "case_002",
+    "question": "Quelle est la performance thermique minimale ?",
+    "expected_evidence": ["Uw maximal", "1,4 W/m².K"],
+    "expected_quality": "strong",
+    "chunk_text": "### 2.2 Performances thermiques\n\nUw maximal : 1,4 W/m².K pour les fenêtres."
+  },
+  {
+    "id": "case_003",
+    "question": "Quelle est la couleur des profilés ?",
+    "expected_evidence": ["RAL 7016"],
+    "expected_quality": "strong",
+    "chunk_text": "Finition laquée RAL 7016."
+  },
+  {
+    "id": "case_004",
+    "question": "Quel est le délai d'exécution du marché ?",
+    "expected_evidence": [],
+    "expected_quality": "none",
+    "chunk_text": ""
+  },
+  {
+    "id": "case_005",
+    "question": "Quelle norme s'applique aux menuiseries ?",
+    "expected_evidence": ["NF EN 14351-1"],
+    "expected_quality": "strong",
+    "chunk_text": "Les menuiseries devront respecter la norme NF EN 14351-1."
+  }
+]
