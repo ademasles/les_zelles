@@ -7,9 +7,8 @@ Includes models for:
 - Answer: AI responses (including alternatives)
 """
 
-# -----------------------------------------------------------------------------------------------
-# IMPORTS
-# -----------------------------------------------------------------------------------------------
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,10 +18,7 @@ from sqlalchemy.orm import relationship, sessionmaker
 
 from app.core.config import settings
 
-# -----------------------------------------------------------------------------------------------
-# CONFIGURATION
-# -----------------------------------------------------------------------------------------------
-DATABASE_URL = settings.database_url
+DATABASE_URL = settings.database_url.replace("+aiosqlite", "")
 
 if DATABASE_URL.startswith("sqlite:///"):
     sqlite_path = Path(DATABASE_URL.removeprefix("sqlite:///"))
@@ -32,31 +28,19 @@ engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# -----------------------------------------------------------------------------------------------
-# MODELS
-# -----------------------------------------------------------------------------------------------
-
 
 class Project(Base):
-    """Project containing uploaded document information and summary."""
-
     __tablename__ = "projects"
 
-    id = Column(String, primary_key=True, index=True)  # doc_id
+    id = Column(String, primary_key=True, index=True)
     name = Column(String)
     uploaded_at = Column(DateTime, default=lambda: datetime.now(UTC))
     summary = Column(Text)
     csv = Column(Text)
 
-    # Relations
     queries = relationship("Query", back_populates="project", cascade="all, delete-orphan")
 
     def as_dict(self):
-        """
-        Convert project to dictionary for serialization.
-        :return: Dictionary representation of the project.
-        """
-
         return {
             "id": self.id,
             "name": self.name,
@@ -67,8 +51,6 @@ class Project(Base):
 
 
 class Query(Base):
-    """User-defined question for a project."""
-
     __tablename__ = "queries"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -76,14 +58,11 @@ class Query(Base):
     question = Column(Text, nullable=False)
     best_answer = Column(Text)
 
-    # Relations
     project = relationship("Project", back_populates="queries")
     answers = relationship("Answer", back_populates="query", cascade="all, delete-orphan")
 
 
 class Answer(Base):
-    """Individual AI-generated answer (alternative) for a query."""
-
     __tablename__ = "answers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -96,11 +75,9 @@ class Answer(Base):
     chunk_id = Column(Integer)
     excerpt = Column(Text)
 
-    # Relation
     query = relationship("Query", back_populates="answers")
 
 
-# -----------------------------------------------------------------------------------------------
-# INITIALIZE
-# -----------------------------------------------------------------------------------------------
-Base.metadata.create_all(bind=engine)
+def init_legacy_tables() -> None:
+    """Create legacy tables if they don't exist. Safe to call on startup."""
+    Base.metadata.create_all(bind=engine)

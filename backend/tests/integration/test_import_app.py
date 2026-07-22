@@ -25,7 +25,9 @@ def _install_optional_dependency_stubs() -> None:
 
     class _FakeFastAPI:
         def __init__(self, *args, **kwargs):
-            self.routes = {"GET": {}, "POST": {}}
+            self.routes = {"GET": {}, "POST": {}, "DELETE": {}}
+            self.router = type("Router", (), {"lifespan_context": None})()
+            self.title = ""
 
         def add_middleware(self, *args, **kwargs):
             return None
@@ -55,7 +57,7 @@ def _install_optional_dependency_stubs() -> None:
 
     class _FakeAPIRouter:
         def __init__(self, *args, **kwargs):
-            self.routes = {"GET": {}, "POST": {}}
+            self.routes = {"GET": {}, "POST": {}, "DELETE": {}}
 
         def get(self, path):
             def decorator(func):
@@ -67,6 +69,13 @@ def _install_optional_dependency_stubs() -> None:
         def post(self, path):
             def decorator(func):
                 self.routes["POST"][path] = func
+                return func
+
+            return decorator
+
+        def delete(self, path):
+            def decorator(func):
+                self.routes["DELETE"][path] = func
                 return func
 
             return decorator

@@ -1,83 +1,52 @@
-# chunking.py
-"""Chunking module for text segmentation based on sentence boundaries.
-This module provides functionality to chunk text into manageable segments
-while preserving context and structure.
+"""Compat — delegates to the new markdown-aware chunker.
+
+Keeps the legacy chunk_text() signature for backward compat with tests.
 """
-# SPDX-FileCopyrightText: 2025 Anton Demasles <
 
-# -----------------------------------------------------------------------------------------------
-# IMPORTS
-# -----------------------------------------------------------------------------------------------
-import re
+from __future__ import annotations
 
-from app.core.config import settings
-
-# -----------------------------------------------------------------------------------------------
-# FUNCTIONS
-# -----------------------------------------------------------------------------------------------
-
-MAX_CHARS = settings.chunk_max_chars
+from app.preprocessing.markdown.section_splitter import chunk_markdown
 
 
-def chunk_text(pages, max_chars=MAX_CHARS):
-    """
-    Chunk text into segments based on sentence boundaries.
-    :param pages: List of dictionaries with 'text', 'doc_name', and 'page_number'.
-    :param max_chars: Maximum number of characters per chunk.
-    :return: List of dictionaries with 'text', 'doc_name', 'page_number', 'start_char', 'end_char', 'raw_text'.
-    """
+def chunk_text(pages: list[dict], max_chars: int = 3000) -> list[dict]:
+    """Legacy-compat: delegates to new markdown-aware chunker."""
     all_chunks = []
-    chunk_counter = 0  # ID unique par chunk
+    chunk_index = 0
+
     for page_data in pages:
         text = page_data.get("text", "")
         doc_name = page_data.get("doc_name", "unknown")
-        page_number = page_data.get("page_number", None)
+        page_number = page_data.get("page_number")
 
-        # Découpe par phrases
-        sentences = re.split(r"(?<=[.?!])\s+", text)
+        new_chunks = chunk_markdown(
+            text,
+            document_id=doc_name,
+            page_start=page_number,
+            max_chars=max_chars,
+        )
 
-        chunk_text = ""
-        start_char = 0
-        chunk_start_offset = 0
+        for c in new_chunks:
+            c["chunk_id"] = chunk_index
+            c["doc_name"] = doc_name
+            c["page_number"] = page_number
+            c["raw_text"] = text
+            c["start_char"] = 0
+            c["end_char"] = len(c["text"])
+            all_chunks.append(c)
+            chunk_index += 1
 
-        for sentence in sentences:
-            if len(chunk_text) + len(sentence) < max_chars:
-                if not chunk_text:
-                    chunk_start_offset = text.find(sentence, start_char)
-                chunk_text += sentence + " "
-            else:
-                chunk_end_offset = chunk_start_offset + len(chunk_text.strip())
-                all_chunks.append(
-                    {
-                        "chunk_id": chunk_counter,
-                        "text": chunk_text.strip(),
-                        "doc_name": doc_name,
-                        "page_number": page_number,
-                        "start_char": chunk_start_offset,
-                        "end_char": chunk_end_offset,
-                        "raw_text": text,
-                    }
-                )
-                # Nouveau chunk
-                chunk_counter += 1
-                start_char = chunk_end_offset
-                chunk_text = sentence + " "
-                chunk_start_offset = text.find(sentence, start_char)
-
-        # Dernier chunk de la page
-        if chunk_text.strip():
-            chunk_end_offset = chunk_start_offset + len(chunk_text.strip())
+        if not new_chunks and text.strip():
             all_chunks.append(
                 {
-                    "chunk_id": chunk_counter,
-                    "text": chunk_text.strip(),
+                    "chunk_id": chunk_index,
+                    "text": text,
                     "doc_name": doc_name,
                     "page_number": page_number,
-                    "start_char": chunk_start_offset,
-                    "end_char": chunk_end_offset,
+                    "start_char": 0,
+                    "end_char": len(text),
                     "raw_text": text,
                 }
             )
-            chunk_counter += 1
+            chunk_index += 1
 
     return all_chunks

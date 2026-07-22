@@ -23,6 +23,7 @@ dependencies = [
     "sentence-transformers",
     "sqlalchemy",
     "aiosqlite",
+    "greenlet",
     "requests",
     "protobuf",
     "docling",

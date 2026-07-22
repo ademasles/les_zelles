@@ -6,16 +6,16 @@ Create Date: 2026-07-22 17:14:54.590280
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 
+from alembic import op
 
 revision: str = "a5b78e3c409d"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -51,7 +51,10 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["project_id"], ["projects.id"],),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["projects.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -69,7 +72,10 @@ def upgrade() -> None:
         ),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(["document_id"], ["documents.id"],),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["documents.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -79,7 +85,10 @@ def upgrade() -> None:
         sa.Column("page_number", sa.Integer(), nullable=False),
         sa.Column("text", sa.Text(), nullable=True),
         sa.Column("metadata_json", sa.Text(), nullable=False),
-        sa.ForeignKeyConstraint(["document_id"], ["documents.id"],),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["documents.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -96,7 +105,10 @@ def upgrade() -> None:
         sa.Column("source_block_ids_json", sa.Text(), nullable=False),
         sa.Column("token_count", sa.Integer(), nullable=True),
         sa.Column("metadata_json", sa.Text(), nullable=False),
-        sa.ForeignKeyConstraint(["document_id"], ["documents.id"],),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["documents.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -111,8 +123,14 @@ def upgrade() -> None:
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["project_id"], ["projects.id"],),
-        sa.ForeignKeyConstraint(["document_id"], ["documents.id"],),
+        sa.ForeignKeyConstraint(
+            ["project_id"],
+            ["projects.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["documents.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -130,7 +148,10 @@ def upgrade() -> None:
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["question_id"], ["questions.id"],),
+        sa.ForeignKeyConstraint(
+            ["question_id"],
+            ["questions.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -143,8 +164,14 @@ def upgrade() -> None:
         sa.Column("section_title", sa.String(length=512), nullable=True),
         sa.Column("quote", sa.Text(), nullable=True),
         sa.Column("score", sa.Float(), nullable=True),
-        sa.ForeignKeyConstraint(["answer_id"], ["answers.id"],),
-        sa.ForeignKeyConstraint(["chunk_id"], ["chunks.id"],),
+        sa.ForeignKeyConstraint(
+            ["answer_id"],
+            ["answers.id"],
+        ),
+        sa.ForeignKeyConstraint(
+            ["chunk_id"],
+            ["chunks.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -159,7 +186,10 @@ def upgrade() -> None:
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["answer_id"], ["answers.id"],),
+        sa.ForeignKeyConstraint(
+            ["answer_id"],
+            ["answers.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
 

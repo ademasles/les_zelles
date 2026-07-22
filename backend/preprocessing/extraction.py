@@ -1,111 +1,51 @@
-# extraction.py
-"""Extract text from various file types including PDF, DOCX, and images using OCR.
-This module provides functions to extract text from PDF files, DOCX files, and images.
-It uses the `pymupdf` library for PDF handling, `python-docx` for DOCX files, and `pytesseract` for OCR on images.
+"""Compat — delegates to new parser implementation.
+
+Supports both legacy signatures:
+  extract_text_from_file(content: bytes, filename: str)
+  extract_text_from_file(path: str)  # old documents.py style
 """
-# SPDX-FileCopyrightText: 2025 Anton Demasles <
 
-# -----------------------------------------------------------------------------------------------
-# IMPORTS
-# -----------------------------------------------------------------------------------------------
+from __future__ import annotations
+
 import asyncio
-import io
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 
-import fitz  # pymupdf
-import pytesseract
-from docx import Document
-from PIL import Image
-
-from app.core.config import settings
+from app.preprocessing.parsers.fallback import parse_with_fallback
 
 
-# -----------------------------------------------------------------------------------------------
-# FUNCTIONS
-# -----------------------------------------------------------------------------------------------
-async def extract_text_from_file(content: bytes, filename) -> list[dict[str, str | int]]:
-    """
-    Extract text from a file based on its type.
-    :param content: File content as bytes.
-    :param filename: Name of the file to determine its type.
-    :return: List of dictionaries with document name, page number, and extracted text.
-    """
-
+async def extract_text_from_file(content: bytes | str, filename: str | None = None) -> list[dict]:
     loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _extract_sync, content, filename)
 
-    if filename.lower().endswith(".pdf"):
-        return await loop.run_in_executor(None, extract_text_pdf, content, filename)
-    elif filename.lower().endswith(".docx"):
-        return await loop.run_in_executor(None, extract_text_docx, content, filename)
-    elif filename.lower().endswith((".png", ".jpg", ".jpeg", ".tiff")):
-        return await loop.run_in_executor(None, extract_text_image, content, filename)
+
+def _extract_sync(content: bytes | str, filename: str | None = None) -> list[dict]:
+    if isinstance(content, str):
+        file_path = Path(content)
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {content}")
+        doc_name = file_path.name
+        if file_path.suffix.lower() not in (".pdf", ".docx"):
+            text = file_path.read_text(encoding="utf-8", errors="replace")
+            return [{"doc_name": doc_name, "page_number": None, "text": text}]
+        parsed = parse_with_fallback(file_path)
     else:
-        return [{"doc_name": filename, "page_number": None, "text": content.decode("utf-8")}]
+        suffix = Path(filename or "unknown").suffix
+        doc_name = filename or "unknown"
+        if suffix.lower() not in (".pdf", ".docx"):
+            text = content.decode("utf-8", errors="replace")
+            return [{"doc_name": doc_name, "page_number": None, "text": text}]
+        with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            file_path = Path(tmp.name)
+        try:
+            parsed = parse_with_fallback(file_path)
+        finally:
+            file_path.unlink(missing_ok=True)
 
-
-# -----------------------------------------------------------------------------------------------
-
-
-def extract_text_pdf(
-    data: bytes,
-    filename="unknown.pdf",
-    use_ocr_fallback=settings.enable_ocr,
-) -> list[dict[str, str | int]]:
-    """
-    Extract text from a PDF file, optionally using OCR for pages without text.
-    :param data: PDF file content as bytes.
-    :param filename: Name of the PDF file.
-    :param use_ocr_fallback: If True, use OCR to extract text from pages without text.
-    :return: List of dictionaries with document name, page number, and extracted text.
-    """
-    results = []
-    try:
-        doc = fitz.open(stream=data, filetype="pdf")
-        for page_number, page in enumerate(doc, start=1):
-            text = page.get_text("text").strip()
-            if not text and use_ocr_fallback:
-                pix = page.get_pixmap(dpi=300)
-                img = Image.open(io.BytesIO(pix.tobytes()))
-                text = pytesseract.image_to_string(img, lang=settings.tesseract_lang)
-
-            results.append({"doc_name": filename, "page_number": page_number, "text": text})
-    except Exception as e:
-        results.append(
-            {
-                "doc_name": filename,
-                "page_number": None,
-                "text": f"[Erreur lors de l'extraction : {str(e)}]",
-            }
-        )
-
-    return results
-
-
-# -----------------------------------------------------------------------------------------------
-
-
-def extract_text_docx(data, filename="unknown.docx"):
-    """
-    Extract text from a DOCX file.
-    :param data: DOCX file content as bytes.
-    :param filename: Name of the DOCX file.
-    :return: List of dictionaries with document name, page number, and extracted text.
-    """
-    doc = Document(io.BytesIO(data))
-    texts = [para.text for para in doc.paragraphs if para.text.strip()]
-    full_text = "\n".join(texts)
-
-    return [{"doc_name": filename, "page_number": None, "text": full_text}]
-
-
-# -----------------------------------------------------------------------------------------------
-def extract_text_image(data, filename="image.jpg"):
-    """
-    Extract text from an image file using OCR.
-    :param data: Image file content as bytes.
-    :param filename: Name of the image file.
-    :return: List of dictionaries with document name, page number, and extracted text.
-    """
-    image = Image.open(io.BytesIO(data))
-    text = pytesseract.image_to_string(image, lang=settings.tesseract_lang)
-
-    return [{"doc_name": filename, "page_number": None, "text": text}]
+    pages = [
+        {"doc_name": doc_name, "page_number": p.page_number, "text": p.text} for p in parsed.pages
+    ]
+    if not pages:
+        pages = [{"doc_name": doc_name, "page_number": None, "text": parsed.markdown}]
+    return pages

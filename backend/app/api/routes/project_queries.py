@@ -1,4 +1,4 @@
-"""Legacy-compat routes for frontend project queries.
+"""ProjectQueries routes — legacy-compat routes for frontend project queries.
 
 These bridge the gap between the old frontend calling /project_queries/
 and the new backend architecture.

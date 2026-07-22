@@ -1,45 +1,24 @@
-# filtering.py
-"""Filtering Module
-This module provides functions to filter text chunks based on semantic similarity and interact with a language model to answer questions.
-It uses SentenceTransformers for embedding and FAISS for efficient similarity search.
-It also includes a function to send prompts to a local LLM API and retrieve answers.
-"""
+"""Compat — delegates to new embeddings/retrieval."""
 
-# -----------------------------------------------------------------------------------------------
-# IMPORTS
-# -----------------------------------------------------------------------------------------------
-from sentence_transformers import SentenceTransformer, util
+from __future__ import annotations
 
-from app.core.config import settings
+from app.rag.embeddings import EmbeddingService
 
-# Chargement du modèle d'embeddings
-embedding_model = SentenceTransformer(settings.embedding_model)
+embedding_model = EmbeddingService()
 
 
-# -----------------------------------------------------------------------------------------------
-# FONCTIONS
-# -----------------------------------------------------------------------------------------------
-def filter_chunks(summaries, query, top_k=5):
-    """
-    Filter text chunks based on semantic similarity to the query.
-    :param summaries: List of dictionaries with text chunks to filter.
-    :param query: The query string to filter chunks against.
-    :param top_k: Number of top results to return.
-    :return: List of filtered chunks with their scores.
-    """
-    query_embedding = embedding_model.encode(query, convert_to_tensor=True)
+def filter_chunks(summaries: list[dict], query: str, top_k: int = 5) -> list[dict]:
+    import numpy as np
 
-    summary_texts = [chunk["summary"] for chunk in summaries]
-    summary_embeddings = embedding_model.encode(summary_texts, convert_to_tensor=True)
+    query_vec = embedding_model.embed_query(query)
+    texts = [s.get("summary", s.get("text", "")) for s in summaries]
+    if not texts:
+        return []
 
-    hits = util.semantic_search(query_embedding, summary_embeddings, top_k=top_k)[0]
+    vecs = embedding_model.embed_chunks(texts)
+    scores = np.dot(vecs, query_vec) / (
+        np.linalg.norm(vecs, axis=1) * np.linalg.norm(query_vec) + 1e-10
+    )
 
-    # Retourner les chunks enrichis originaux avec score facultatif
-    filtered = []
-    for hit in hits:
-        chunk = summaries[hit["corpus_id"]]
-        chunk_with_score = chunk.copy()
-        chunk_with_score["score"] = float(hit["score"])  # Ajout de la pertinence
-        filtered.append(chunk_with_score)
-
-    return filtered
+    top_indices = np.argsort(scores)[-top_k:][::-1]
+    return [{**summaries[i], "score": float(scores[i])} for i in top_indices]

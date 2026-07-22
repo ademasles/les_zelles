@@ -33,9 +33,7 @@ class DocumentRepository:
         return doc
 
     async def get(self, document_id: str) -> Document | None:
-        result = await self.session.execute(
-            select(Document).where(Document.id == document_id)
-        )
+        result = await self.session.execute(select(Document).where(Document.id == document_id))
         return result.scalar_one_or_none()
 
     async def get_by_project(self, project_id: str) -> list[Document]:

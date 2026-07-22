@@ -1,174 +1,108 @@
-# qa.py
-"""Question Answering Module
-This module provides functions to filter text chunks based on semantic similarity and interact with a language model to answer questions.
-It uses SentenceTransformers for embedding and FAISS for efficient similarity search.
-It also includes a function to send prompts to a local LLM API and retrieve answers.
-"""
+"""Compat — delegates to new RAG service for question answering."""
 
-# -----------------------------------------------------------------------------------------------
-# IMPORTS
-# -----------------------------------------------------------------------------------------------
-import requests
-from sentence_transformers import SentenceTransformer, util  # , CrossEncoder
+from __future__ import annotations
 
-from app.core.config import settings
+from typing import Any
 
-MAX_CONTEXT_TOKENS = settings.max_context_tokens
-embedding_model = SentenceTransformer(settings.embedding_model)
-url = settings.ollama_base_url
+from app.llm.ollama_client import OllamaClient
+from app.rag.embeddings import EmbeddingService
 
 
-# -----------------------------------------------------------------------------------------------
-# FONCTIONS
-# -----------------------------------------------------------------------------------------------
-def filter_chunks(summaries, query, top_k=5):
-    """
-    Filter text chunks based on semantic similarity to the query.
-    :param summaries: List of dictionaries with text chunks to filter.
-    :param query: The query string to filter chunks against.
-    :param top_k: Number of top results to return.
-    :return: List of filtered chunks with their scores.
-    """
-    top_k = min(top_k, len(summaries))
-    query_embedding = embedding_model.encode(query, convert_to_tensor=True)
+def filter_chunks(summaries: list[dict], query: str, top_k: int = 5) -> list[dict]:
+    """Legacy-compat: semantic filter using embeddings."""
+    import numpy as np
 
-    summary_texts = [chunk["summary"] for chunk in summaries]
-    summary_embeddings = embedding_model.encode(summary_texts, convert_to_tensor=True)
+    emb = EmbeddingService()
+    query_vec = emb.embed_query(query)
+    texts = [s.get("summary", s.get("text", "")) for s in summaries]
+    if not texts:
+        return []
 
-    hits = util.semantic_search(query_embedding, summary_embeddings, top_k=top_k)[0]
+    vecs = emb.embed_chunks(texts)
+    scores = np.dot(vecs, query_vec) / (
+        np.linalg.norm(vecs, axis=1) * np.linalg.norm(query_vec) + 1e-10
+    )
 
-    # Retourner les chunks enrichis originaux avec score facultatif
-    filtered = []
-    for hit in hits:
-        chunk = summaries[hit["corpus_id"]]
-        chunk_with_score = chunk.copy()
-        chunk_with_score["score"] = float(hit["score"])  # Ajout de la pertinence
-        filtered.append(chunk_with_score)
-
-    return filtered
+    top_indices = np.argsort(scores)[-top_k:][::-1]
+    return [{**summaries[i], "score": float(scores[i])} for i in top_indices]
 
 
-# -----------------------------------------------------------------------------------------------
-def ask_llm(prompt, model=settings.llm_model, url=url):
-    """
-    Send a prompt to the local LLM API and return the response.
-    :param prompt: The text prompt to send to the LLM.
-    :param model: The model to use for the LLM (default is "mistral").
-    :param url: The URL of the local LLM API.
-    :return: The response text from the LLM.
-    """
-    full_url = url.rstrip("/") + "/api/generate"
-    payload = {"model": model, "prompt": prompt, "stream": False}
+def ask_llm(prompt: str, model: str | None = None, url: str | None = None) -> str | None:
+    from app.core.config import settings
 
+    client = OllamaClient(
+        base_url=url or settings.ollama_base_url,
+        model=model or settings.llm_model,
+    )
     try:
-        response = requests.post(full_url, json=payload, timeout=120)
-        response.raise_for_status()
-        return response.json().get("response", "").strip()
+        return client.generate(prompt)
     except Exception as e:
-        print(f"❌ Erreur en appelant Mistral : {e}")
+        print(f"LLM error: {e}")
         return None
 
 
-# -----------------------------------------------------------------------------------------------
-
-
-# cross_encoder = CrossEncoder("dangvantuan/CrossEncoder-camembert-large", max_length=512)
-def chat_llm(question: str, summaries: list, model=settings.llm_model, top_k=5):
-    """
-    Interact with the LLM to answer a question based on filtered text chunks.
-    :param question: The question to ask the LLM.
-    :param summaries: List of text chunks to filter and use for answering.
-    :param model: The model to use for the LLM (default is "mistral").
-    :param top_k: Number of top chunks to consider for answering.
-    :return: The best answer from the LLM and a dictionary of all answers with their scores.
-    """
-    top_k = min(top_k, len(summaries))
-    # Étape 1 : filtrer les chunks les plus proches sémantiquement
-    relevant_summaries = filter_chunks(summaries, question, top_k=top_k)
-
+def chat_llm(
+    question: str, summaries: list, model: str | None = None, top_k: int = 5
+) -> tuple[str, dict]:
+    relevant = filter_chunks(summaries, question, top_k=top_k)
     best_answer = None
     best_score = -1
-    answers = {"response": [], "score": [], "chunk": []}
+    answers: dict[str, list] = {"response": [], "score": [], "chunk": []}
 
-    for chunk in relevant_summaries:
-        # Utilise le chunk text complet, pas seulement le résumé
-        chunk_text = chunk.get("summary", "").strip()
-        doc_name = chunk.get("doc_name", "unknown")
-        page_number = chunk.get("page_number", "?")
-
-        prompt = f"""Tu es un assistant expert en menuiserie. Voici un extrait de CCTP technique :
-
-{chunk_text}
-
-Consigne :  
-Réponds précisément à la question suivante **uniquement si** l'information est explicitement présente dans le texte.  
-Sinon, réponds simplement par : "RAS".
-
-Question : {question}
-
-Réponse :
-"""
-
-        try:
-            response = ask_llm(prompt, model=model)
-            print("Réponse LLM OK")
-        except Exception as e:
-            print(f"❌ Erreur LLM : {e}")
+    for chunk in relevant:
+        chunk_text = chunk.get("summary", chunk.get("text", "")).strip()
+        if not chunk_text:
             continue
 
+        prompt = (
+            f"Tu es un assistant expert en menuiserie. Voici un extrait de CCTP technique :\n\n"
+            f"{chunk_text}\n\n"
+            f"Consigne :\n"
+            f"Reponds precisement a la question suivante uniquement si l'information "
+            f"est explicitement presente dans le texte.\n"
+            f"Sinon, reponds simplement par : RAS.\n\n"
+            f"Question : {question}\n\n"
+            f"Reponse :"
+        )
+
+        response = ask_llm(prompt, model=model)
         if response and "ras" not in response.lower():
-            try:
-                # score = cross_encoder.predict([(question, response)])[0]
-                score = util.cos_sim(
-                    embedding_model.encode(question, convert_to_tensor=True),
-                    embedding_model.encode(response, convert_to_tensor=True),
-                ).item()
-            except RuntimeError as e:
-                print(f"❌ Erreur de calcul de similarité : {e}")
-                continue
+            import numpy as np
+
+            emb = EmbeddingService()
+            qv = emb.embed_query(question)
+            rv = emb.embed_query(response)
+            score = float(np.dot(qv, rv) / (np.linalg.norm(qv) * np.linalg.norm(rv) + 1e-10))
 
             answers["response"].append(response.strip())
-            answers["score"].append(float(score))
+            answers["score"].append(score)
             answers["chunk"].append(chunk)
 
             if score > best_score:
                 best_answer = response.strip()
                 best_score = score
 
-    return best_answer or "Non trouvé", answers
+    return best_answer or "Non trouve", answers
 
 
-# -----------------------------------------------------------------------------------------------
-def answer_queries(queries: dict, summaries: list, top_k=5, model=settings.llm_model):
-    """
-    Answer a set of queries using the provided text chunks.
-    :param queries: Dictionary of queries where keys are query IDs and values are display questions.
-    :param summaries: List of text chunks to filter and use for answering.
-    :param top_k: Number of top chunks to consider for each query.
-    :param model: The model to use for the LLM (default is "mistral").
-    :return: Dictionary of results with answers and additional information.
-    """
+def answer_queries(
+    queries: dict, summaries: list, top_k: int = 5, model: str | None = None
+) -> dict[str, Any]:
     results = {}
-    top_k = min(top_k, len(summaries))
-    for display_question, query in queries.items():
-        print(f"\n🔍 Question : {display_question} ?")
+    top_k = min(top_k, len(summaries)) if summaries else 1
 
+    for display_question, query in queries.items():
         best_answer, answers = chat_llm(query, summaries, model=model, top_k=top_k)
 
-        # Vérification préventive
-        if not (len(answers["response"]) == len(answers["score"]) == len(answers["chunk"])):
-            print(f"❌ Format d'alignement incorrect pour la question : {display_question}")
-            continue
-
         items = []
-        for resp, sc, chunk in sorted(
-            zip(answers["response"], answers["score"], answers["chunk"]),
-            key=lambda x: x[1],
-            reverse=True,
-        ):
-            if not chunk.get("chunk_text", "").strip():
-                continue  # évite les textes vides
 
+        responses = answers.get("response", [])
+        scores = answers.get("score", [])
+        chunks = answers.get("chunk", [])
+
+        for resp, sc, chunk in zip(responses, scores, chunks, strict=False):
+            if not chunk.get("chunk_text", "").strip():
+                continue
             text_len = len(chunk["chunk_text"])
             start = min(chunk.get("start_char", 0), text_len)
             end = min(chunk.get("end_char", text_len), text_len)

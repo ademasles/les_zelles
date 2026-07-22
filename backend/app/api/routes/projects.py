@@ -25,28 +25,20 @@ def get_projects() -> list[dict[str, Any]]:
 
 @router.post("/")
 async def save_project(request: Request) -> dict[str, str]:
-    """Create a new project from a JSON body with filename, summary, and type."""
+    """Create a new project from a JSON body with name."""
     body = await request.json()
     name = body.get("name")
-    summary = body.get("summary", "")
-    document_type = body.get("document_type", "")
-    file_path = body.get("file_path", "")
 
     if not name:
         raise HTTPException(status_code=400, detail="name is required")
 
     db = SessionLocal()
     try:
-        new_project = Project(
-            name=name,
-            summary=summary,
-            document_type=document_type,
-            file_path=file_path,
-        )
+        new_project = Project(name=name)
         db.add(new_project)
         db.commit()
         db.refresh(new_project)
-        return {"message": f"Projet '{name}' enregistré", "project_id": new_project.id}
+        return {"message": f"Projet '{name}' enregistre", "project_id": new_project.id}
     finally:
         db.close()
 
@@ -58,7 +50,7 @@ def get_project(project_id: str) -> dict[str, Any]:
     try:
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            raise HTTPException(status_code=404, detail="Projet non trouvé")
+            raise HTTPException(status_code=404, detail="Projet non trouve")
         return project.as_dict()
     finally:
         db.close()
@@ -71,10 +63,10 @@ def delete_project(project_id: str) -> dict[str, str]:
     try:
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            raise HTTPException(status_code=404, detail="Projet non trouvé")
+            raise HTTPException(status_code=404, detail="Projet non trouve")
         db.delete(project)
         db.commit()
-        return {"message": "Projet supprimé avec succès"}
+        return {"message": "Projet supprime avec succes"}
     finally:
         db.close()
 
@@ -86,7 +78,7 @@ def get_project_queries(project_id: str) -> dict[str, Any]:
     try:
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            raise HTTPException(status_code=404, detail="Projet non trouvé")
+            raise HTTPException(status_code=404, detail="Projet non trouve")
 
         queries = db.query(Query).filter(Query.project_id == project_id).all()
         output: dict[str, Any] = {}
@@ -123,18 +115,18 @@ async def add_query_to_project(project_id: str, request: Request) -> dict[str, s
     result_json = form_data.get("result")
 
     if not all([question, result_json]):
-        raise HTTPException(status_code=400, detail="Requête incomplète")
+        raise HTTPException(status_code=400, detail="Requete incomplete")
 
     try:
         result = json.loads(result_json)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="JSON mal formé dans result")
+        raise HTTPException(status_code=400, detail="JSON mal forme dans result") from None
 
     db = SessionLocal()
     try:
         project = db.query(Project).filter(Project.id == project_id).first()
         if not project:
-            raise HTTPException(status_code=404, detail="Projet non trouvé")
+            raise HTTPException(status_code=404, detail="Projet non trouve")
 
         new_query = Query(
             project_id=project_id,
@@ -158,6 +150,6 @@ async def add_query_to_project(project_id: str, request: Request) -> dict[str, s
             db.add(answer)
 
         db.commit()
-        return {"message": f"Question '{question}' ajoutée au projet {project_id}"}
+        return {"message": f"Question '{question}' ajoutee au projet {project_id}"}
     finally:
         db.close()

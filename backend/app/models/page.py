@@ -18,9 +18,7 @@ if TYPE_CHECKING:
 class Page(Base):
     __tablename__ = "pages"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     document_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("documents.id"), nullable=False, index=True
     )

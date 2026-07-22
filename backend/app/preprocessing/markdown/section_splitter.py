@@ -13,7 +13,6 @@ import re
 from typing import Any
 
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
-MAX_CHARS = 3000
 OVERLAP_CHARS = 100
 
 
@@ -29,6 +28,7 @@ def _split_oversized(
     doc_id: str,
     chunk_index: int,
     page_start: int | None,
+    max_chars: int = 3000,
 ) -> list[dict[str, Any]]:
     chunks: list[dict[str, Any]] = []
     paragraphs = re.split(r"(\n\n+)", text)
@@ -38,11 +38,16 @@ def _split_oversized(
     for para in paragraphs:
         if not para.strip():
             continue
-        if len(current) + len(para) > MAX_CHARS and current:
+        if len(current) + len(para) > max_chars and current:
             chunks.append(
                 _make_chunk(
-                    current, heading_path, section_title,
-                    start_offset, doc_id, i, page_start,
+                    current,
+                    heading_path,
+                    section_title,
+                    start_offset,
+                    doc_id,
+                    i,
+                    page_start,
                 )
             )
             i += 1
@@ -54,8 +59,13 @@ def _split_oversized(
     if current.strip():
         chunks.append(
             _make_chunk(
-                current, heading_path, section_title,
-                start_offset, doc_id, i, page_start,
+                current,
+                heading_path,
+                section_title,
+                start_offset,
+                doc_id,
+                i,
+                page_start,
             )
         )
     return chunks
@@ -89,12 +99,20 @@ def chunk_markdown(
     markdown: str,
     document_id: str = "",
     page_start: int | None = None,
+    max_chars: int = 3000,
 ) -> list[dict[str, Any]]:
     headings = list(HEADING_RE.finditer(markdown))
 
     if not headings:
         return _split_oversized(
-            markdown, [], "", 0, document_id, 0, page_start,
+            markdown,
+            [],
+            "",
+            0,
+            document_id,
+            0,
+            page_start,
+            max_chars=max_chars,
         )
 
     chunks: list[dict[str, Any]] = []
@@ -112,18 +130,29 @@ def chunk_markdown(
         next_start = headings[i + 1].start() if i + 1 < len(headings) else len(markdown)
         section_text = markdown[start:next_start].strip()
 
-        if len(section_text) <= MAX_CHARS:
+        if len(section_text) <= max_chars:
             chunks.append(
                 _make_chunk(
-                    section_text, list(heading_path), title,
-                    start, document_id, chunk_index, page_start,
+                    section_text,
+                    list(heading_path),
+                    title,
+                    start,
+                    document_id,
+                    chunk_index,
+                    page_start,
                 )
             )
             chunk_index += 1
         else:
             sub_chunks = _split_oversized(
-                section_text, list(heading_path), title,
-                start, document_id, chunk_index, page_start,
+                section_text,
+                list(heading_path),
+                title,
+                start,
+                document_id,
+                chunk_index,
+                page_start,
+                max_chars=max_chars,
             )
             chunks.extend(sub_chunks)
             chunk_index += len(sub_chunks)

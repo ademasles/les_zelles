@@ -72,11 +72,13 @@ class FaissVectorStore:
         for dist, idx in zip(distances[0], indices[0], strict=False):
             if idx < 0 or idx >= len(self._chunk_ids):
                 continue
-            results.append({
-                "chunk_id": self._chunk_ids[idx],
-                "score": float(1.0 / (1.0 + dist)),
-                "metadata": self._metadata[idx] if idx < len(self._metadata) else {},
-            })
+            results.append(
+                {
+                    "chunk_id": self._chunk_ids[idx],
+                    "score": float(1.0 / (1.0 + dist)),
+                    "metadata": self._metadata[idx] if idx < len(self._metadata) else {},
+                }
+            )
 
         return results
 
@@ -97,11 +99,14 @@ class FaissVectorStore:
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "wb") as f:
-            pickle.dump({
-                "index": self._index,
-                "chunk_ids": self._chunk_ids,
-                "metadata": self._metadata,
-            }, f)
+            pickle.dump(
+                {
+                    "index": self._index,
+                    "chunk_ids": self._chunk_ids,
+                    "metadata": self._metadata,
+                },
+                f,
+            )
 
     def load(self, path: Path) -> None:
         if path.exists():

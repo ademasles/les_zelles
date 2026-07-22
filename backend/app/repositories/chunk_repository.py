@@ -19,9 +19,7 @@ class ChunkRepository:
 
     async def get_by_document(self, document_id: str) -> list[Chunk]:
         result = await self.session.execute(
-            select(Chunk)
-            .where(Chunk.document_id == document_id)
-            .order_by(Chunk.chunk_index)
+            select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.chunk_index)
         )
         return list(result.scalars().all())
 

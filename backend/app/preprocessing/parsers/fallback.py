@@ -26,13 +26,9 @@ def parse_with_fallback(file_path: Path) -> ParsedDocument:
             parser_name = type(parser).__name__.replace("Parser", "").lower()
             if errors:
                 result.parsing_stats["fallback_used"] = True
-                result.parsing_stats["fallback_chain"] = [
-                    type(p).__name__ for p in chain
-                ]
+                result.parsing_stats["fallback_chain"] = [type(p).__name__ for p in chain]
                 result.parsing_stats["fallback_errors"] = errors
-                logger.warning(
-                    "Fallback to %s after errors: %s", parser_name, errors
-                )
+                logger.warning("Fallback to %s after errors: %s", parser_name, errors)
             return result
         except Exception as e:
             errors.append(f"{type(parser).__name__}: {e}")

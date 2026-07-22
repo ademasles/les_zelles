@@ -61,16 +61,18 @@ async def answer_question(
     citations = []
     for r in results:
         meta = r.metadata or {}
-        citations.append({
-            "document_id": meta.get("document_id", ""),
-            "document_name": meta.get("document_name", ""),
-            "chunk_id": r.chunk_id,
-            "page_start": meta.get("page_start"),
-            "page_end": meta.get("page_end"),
-            "section_title": meta.get("section_title", ""),
-            "quote": r.text[:500] if r.text else "",
-            "score": r.score,
-        })
+        citations.append(
+            {
+                "document_id": meta.get("document_id", ""),
+                "document_name": meta.get("document_name", ""),
+                "chunk_id": r.chunk_id,
+                "page_start": meta.get("page_start"),
+                "page_end": meta.get("page_end"),
+                "section_title": meta.get("section_title", ""),
+                "quote": r.text[:500] if r.text else "",
+                "score": r.score,
+            }
+        )
 
     return {
         "answer": answer_text,

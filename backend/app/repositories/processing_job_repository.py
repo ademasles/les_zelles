@@ -21,9 +21,7 @@ class ProcessingJobRepository:
         return job
 
     async def get(self, job_id: str) -> ProcessingJob | None:
-        result = await self.session.execute(
-            select(ProcessingJob).where(ProcessingJob.id == job_id)
-        )
+        result = await self.session.execute(select(ProcessingJob).where(ProcessingJob.id == job_id))
         return result.scalar_one_or_none()
 
     async def get_by_document(self, document_id: str) -> list[ProcessingJob]:

@@ -24,7 +24,5 @@ class FeedbackRepository:
         return fb
 
     async def get_by_answer(self, answer_id: str) -> list[Feedback]:
-        result = await self.session.execute(
-            select(Feedback).where(Feedback.answer_id == answer_id)
-        )
+        result = await self.session.execute(select(Feedback).where(Feedback.answer_id == answer_id))
         return list(result.scalars().all())

@@ -26,9 +26,7 @@ class QuestionRepository:
         return q
 
     async def get(self, question_id: str) -> Question | None:
-        result = await self.session.execute(
-            select(Question).where(Question.id == question_id)
-        )
+        result = await self.session.execute(select(Question).where(Question.id == question_id))
         return result.scalar_one_or_none()
 
     async def get_by_project(self, project_id: str) -> list[Question]:

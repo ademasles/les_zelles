@@ -53,5 +53,4 @@ class ParsedDocument:
 
 class DocumentParser(ABC):
     @abstractmethod
-    def parse(self, file_path: Path) -> ParsedDocument:
-        ...
+    def parse(self, file_path: Path) -> ParsedDocument: ...

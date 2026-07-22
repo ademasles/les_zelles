@@ -1,7 +1,7 @@
 """Packaged backend entrypoint for Analyse-DCE.
 
-Wraps the legacy FastAPI app and adds new layered routes.
-Calls init_db() on startup to ensure tables exist.
+Calls init_db() on startup to ensure all tables exist.
+Initializes logging and shared singletons on startup.
 """
 
 from __future__ import annotations
@@ -17,24 +17,28 @@ from app.api.routes.project_queries import router as project_queries_router
 from app.api.routes.projects import router as projects_router
 from app.api.routes.summaries import router as summaries_router
 from app.core.config import settings
+from app.core.logging import setup_logging
 from app.database.session import init_db
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-import main as legacy_main
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging(debug=settings.debug)
+    from database.database import init_legacy_tables
+
+    init_legacy_tables()
     await init_db()
     yield
 
 
 def create_app() -> FastAPI:
-    app = legacy_main.app
+    import main as legacy_main
 
+    app = legacy_main.app
     app.router.lifespan_context = lifespan
 
     if not any(getattr(route, "path", None) == "/api/health" for route in app.routes):

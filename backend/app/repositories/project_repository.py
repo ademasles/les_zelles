@@ -19,9 +19,7 @@ class ProjectRepository:
         return project
 
     async def get(self, project_id: str) -> Project | None:
-        result = await self.session.execute(
-            select(Project).where(Project.id == project_id)
-        )
+        result = await self.session.execute(select(Project).where(Project.id == project_id))
         return result.scalar_one_or_none()
 
     async def list_all(self) -> list[Project]:

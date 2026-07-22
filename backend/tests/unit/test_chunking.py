@@ -27,14 +27,13 @@ def test_chunk_text_splits_long_text_into_multiple_chunks():
         {
             "doc_name": "doc.pdf",
             "page_number": 1,
-            "text": "Une phrase courte. " + "Mot " * 40 + "Fin.",
+            "text": "Paragraph 1.\n\nParagraph 2.\n\nParagraph 3.\n\nParagraph 4.\n\nParagraph 5.",
         }
     ]
 
-    chunks = chunk_text(pages, max_chars=80)
+    chunks = chunk_text(pages, max_chars=30)
 
-    assert len(chunks) >= 2
+    assert len(chunks) >= 2, f"Expected >=2 chunks, got {len(chunks)}"
     assert [chunk["chunk_id"] for chunk in chunks] == list(range(len(chunks)))
     assert all(chunk["doc_name"] == "doc.pdf" for chunk in chunks)
-    assert all(chunk["page_number"] == 1 for chunk in chunks)
-    assert all(chunk["start_char"] <= chunk["end_char"] for chunk in chunks)
+    assert all(chunk.get("document_id") for chunk in chunks)

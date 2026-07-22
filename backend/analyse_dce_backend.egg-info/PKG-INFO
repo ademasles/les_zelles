@@ -18,10 +18,12 @@ Requires-Dist: torch
 Requires-Dist: sentence-transformers
 Requires-Dist: sqlalchemy
 Requires-Dist: aiosqlite
+Requires-Dist: greenlet
 Requires-Dist: requests
 Requires-Dist: protobuf
 Requires-Dist: docling
 Provides-Extra: dev
+Requires-Dist: alembic; extra == "dev"
 Requires-Dist: pytest; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
 Requires-Dist: httpx; extra == "dev"
