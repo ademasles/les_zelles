@@ -39,7 +39,7 @@ app.add_middleware(
 
 
 @app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):
+async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):  # noqa: B008
     if doc_id in documents:
         raise HTTPException(status_code=400, detail="Document ID already exists")
     if not is_allowed_extension(file.filename or ""):

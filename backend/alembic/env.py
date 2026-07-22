@@ -3,24 +3,23 @@
 Uses the application's SQLAlchemy models for autogenerate support.
 """
 
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-config = context.config
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
-
-import sys
-from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app.models  # noqa: F401
 from app.database.base import Base
+
+config = context.config
+
+if config.config_file_name is not None:
+    fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 

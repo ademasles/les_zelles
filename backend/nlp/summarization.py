@@ -1,6 +1,7 @@
 # summarization.py
 """Summarization module for processing text chunks and generating summaries.
-This module provides functions to summarize text chunks using a language model and to generate global summaries.
+This module provides functions to summarize text chunks using a language model
+and to generate global summaries.
 """
 
 # -----------------------------------------------------------------------------------------------
@@ -23,15 +24,20 @@ def summarize_chunk(chunk, model=settings.llm_model, url=url):
     """
     full_url = url.rstrip("/") + "/api/generate"
     prompt = f"""
-    Tu es un expert en menuiserie du bâtiment. Ton rôle est d'analyser un extrait de CCTP et de produire un résumé fluide, professionnel et directement utile à un bureau d'études.
+    Tu es un expert en menuiserie du batiment. Ton role est d'analyser un extrait
+    de CCTP et de produire un resume fluide, professionnel et directement utile
+    a un bureau d'etudes.
 
-    Objectif : extraire uniquement les informations techniques réellement présentes dans le texte, utiles à l'étude et au chiffrage (ex : matériaux, coloris, vitrage, pose, normes, performances, accessoires, etc.).
+    Objectif : extraire uniquement les informations techniques reellement
+    presentes dans le texte, utiles a l'etude et au chiffrage (ex : materiaux,
+    coloris, vitrage, pose, normes, performances, accessoires, etc.).
 
     Contraintes :
     - Utilise un style narratif naturel, sans liste à puces
     - Ne commente pas l'absence d'information
     - Ne complète rien par déduction ou généralisation
-    - Si plusieurs informations sont présentes, exprime-les dans des phrases distinctes, chacune compréhensible seule
+    - Si plusieurs informations sont presentes, exprime-les dans des phrases
+      distinctes, chacune comprehensible seule
 
     Contenu à analyser :
     {chunk["text"]}
@@ -61,7 +67,7 @@ def summarize_cctp(chunks, verbose=True, model=settings.llm_model):
     for i, chunk in enumerate(chunks):
         if verbose:
             print(
-                f"📄 Résumé du chunk {i + 1}/{len(chunks)} - page {chunk.get('page_number', '?')}..."
+                f"Resume du chunk {i + 1}/{len(chunks)} - page {chunk.get('page_number', '?')}..."
             )
 
         summary = summarize_chunk(chunk)  # Fonction que tu as déjà

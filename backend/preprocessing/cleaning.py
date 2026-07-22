@@ -1,7 +1,8 @@
 # cleaning.py
 """Cleaning module for text normalization and standardization.
-This module provides functions to clean and normalize text extracted from various sources.
-It includes functions to remove invisible characters, normalize line endings, and apply common typographic replacements.
+This module provides functions to clean and normalize text extracted from
+various sources. It includes functions to remove invisible characters, normalize
+line endings, and apply common typographic replacements.
 It also handles Unicode normalization and standard text cleaning.
 """
 # SPDX-FileCopyrightText: 2025 Anton Demasles <

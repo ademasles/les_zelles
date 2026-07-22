@@ -16,10 +16,12 @@ async def get_summary(doc_id: str):
         result = await compat_summary(doc_id)
         if "error" in result:
             raise HTTPException(status_code=404, detail=result["error"])
-        return JSONResponse(content={
-            "doc_id": doc_id,
-            "summary": result["summary"],
-        })
+        return JSONResponse(
+            content={
+                "doc_id": doc_id,
+                "summary": result["summary"],
+            }
+        )
     except HTTPException:
         raise
     except Exception as e:
