@@ -35,7 +35,18 @@ def _install_optional_dependency_stubs() -> None:
         def add_api_route(self, path, endpoint, methods=None, tags=None):
             for method in methods or ["GET"]:
                 self.routes.setdefault(method, {})[path] = endpoint
-                self.router.routes.append(type("RouteStub", (), {"methods": [method], "path": path, "endpoint": endpoint, "deprecated": False})())
+                self.router.routes.append(
+                    type(
+                        "RouteStub",
+                        (),
+                        {
+                            "methods": [method],
+                            "path": path,
+                            "endpoint": endpoint,
+                            "deprecated": False,
+                        },
+                    )()
+                )
 
         def include_router(self, router, prefix=""):
             for method, routes in router.routes.items():
@@ -228,4 +239,8 @@ def test_fastapi_app_imports_and_health_route_responds_ok():
 
     main = importlib.import_module("app.main")
 
-    assert next((r for r in main.app.router.routes if getattr(r, "path", None) == "/api/health"), None) is not None
+    route = next(
+        (r for r in main.app.router.routes if getattr(r, "path", None) == "/api/health"),
+        None,
+    )
+    assert route is not None
