@@ -5,7 +5,7 @@ Act as a senior Python/FastAPI engineer, AI architecture reviewer, and pragmatic
 
 You are working on Analyse-DCE, a FastAPI + Streamlit POC for analysing CCTP/tender documents with RAG.
 
-Before making changes, read `REFRACTOR_DECISIONS.md` and follow its decisions.
+Before making changes, read `REFACTOR_DECISIONS.md` and follow its decisions.
 
 Important constraints:
 - Do not rewrite the whole application.
@@ -38,7 +38,7 @@ Move local LLM calls behind an LLMClient interface so Ollama/Mistral remains the
 
 ## Files to inspect first
 
-- `REFRACTOR_DECISIONS.md`
+- `REFACTOR_DECISIONS.md`
 - `backend/app/main.py`
 - `backend/app/api/routes/*.py`
 - `backend/app/schemas/*.py`
