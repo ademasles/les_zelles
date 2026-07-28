@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
     llm_provider: str = "ollama"
-    llm_model: str = "mistral"
+    llm_model: str = "gemma4:e4b"
     ollama_base_url: str = "http://localhost:11434"
 
     feedback_file: Path = Path("./feedback_dataset.jsonl")

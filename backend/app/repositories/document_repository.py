@@ -32,6 +32,12 @@ class DocumentRepository:
         await self.session.flush()
         return doc
 
+    async def update_document(self, document: Document) -> Document:
+        self.session.add(document)
+        await self.session.flush()
+        await self.session.refresh(document)
+        return document
+
     async def get(self, document_id: str) -> Document | None:
         result = await self.session.execute(select(Document).where(Document.id == document_id))
         return result.scalar_one_or_none()

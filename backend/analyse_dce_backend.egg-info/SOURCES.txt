@@ -8,12 +8,15 @@ analyse_dce_backend.egg-info/top_level.txt
 app/__init__.py
 app/main.py
 app/api/__init__.py
+app/api/dependencies.py
 app/api/routes/__init__.py
 app/api/routes/documents.py
+app/api/routes/feedback.py
 app/api/routes/health.py
 app/api/routes/project_queries.py
 app/api/routes/projects.py
 app/api/routes/summaries.py
+app/api/routes/uploads.py
 app/core/__init__.py
 app/core/config.py
 app/core/logging.py
@@ -59,7 +62,9 @@ app/repositories/feedback_repository.py
 app/repositories/processing_job_repository.py
 app/repositories/project_repository.py
 app/services/__init__.py
+app/services/document_service.py
 app/services/processing_service.py
+app/services/question_service.py
 app/services/rag_service.py
 app/storage/__init__.py
 app/storage/file_store.py

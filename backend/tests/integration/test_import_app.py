@@ -87,6 +87,8 @@ def _install_optional_dependency_stubs() -> None:
     fastapi_module.Form = lambda *args, **kwargs: None
     fastapi_module.HTTPException = _HTTPException
     fastapi_module.Request = object
+    fastapi_module.Depends = lambda *args, **kwargs: None
+    fastapi_module.BackgroundTasks = type("BackgroundTasks", (), {"add_task": lambda *args, **kwargs: None})
     encoders_module.jsonable_encoder = lambda value: value
 
     class _CORSMiddleware:

@@ -10,21 +10,25 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import is_allowed_extension, validate_upload_size
+from app.database.session import get_db
+from app.rag.retriever import Retriever
+from app.api.dependencies import get_retriever
+from app.repositories.document_repository import DocumentRepository
+from app.repositories.project_repository import ProjectRepository
+from app.services.document_service import DocumentService
+from app.services.processing_service import process_document
+from app.services.question_service import QuestionService
 from compat import (
-    compat_query,
-    compat_run_queries,
     compat_save_project,
     compat_store_feedback,
-    compat_summary,
-    compat_upload,
-    documents,
 )
 from utils.highlight import highlight_chunk
 
@@ -36,58 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), doc_id: str = Form(...)):  # noqa: B008
-    if doc_id in documents:
-        raise HTTPException(status_code=400, detail="Document ID already exists")
-    if not is_allowed_extension(file.filename or ""):
-        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are accepted")
-
-    content = await file.read()
-    validate_upload_size(content)
-
-    suffix = Path(file.filename or "upload.pdf").suffix
-    with NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(content)
-        tmp_path = Path(tmp.name)
-
-    try:
-        result = await compat_upload(tmp_path, doc_id)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur traitement document: {e}") from e
-    finally:
-        tmp_path.unlink(missing_ok=True)
-
-
-@app.post("/query/")
-async def query(doc_id: str = Form(...), question: str = Form(...)):
-    try:
-        result = await compat_query(doc_id, question)
-        if "error" in result:
-            return JSONResponse(status_code=404, content=result)
-        return JSONResponse(content=result)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-
-@app.post("/queries/")
-async def run_queries(doc_id: str = Form(...)):
-    try:
-        result = await compat_run_queries(doc_id)
-        return JSONResponse(content=result)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-
-@app.get("/summary/")
-async def summary(doc_id: str):
-    result = await compat_summary(doc_id)
-    if "error" in result:
-        return JSONResponse(status_code=404, content=result)
-    return JSONResponse(content=result)
 
 
 @app.post("/save/")
@@ -127,9 +79,9 @@ def trigger_training():
         return {"status": "error", "message": str(e)}
 
 
-@app.get("/highlight/")
-def highlight(doc_id: str, chunk_id: int):
-    return highlight_chunk(doc_id, chunk_id, documents)
+# @app.get("/highlight/")
+# def highlight(doc_id: str, chunk_id: int):
+#     return highlight_chunk(doc_id, chunk_id, documents)
 
 
 @app.get("/ping/")

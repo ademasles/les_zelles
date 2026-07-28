@@ -30,7 +30,7 @@ class OllamaClient(LLMClient):
                 "stream": False,
                 "options": {"temperature": temperature},
             },
-            timeout=120,
+            timeout=3000,
         )
         resp.raise_for_status()
         return resp.json().get("response", "")

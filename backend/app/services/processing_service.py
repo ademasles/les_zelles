@@ -7,10 +7,9 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database.session import async_session_factory
 from app.preprocessing.markdown.section_splitter import chunk_markdown
 from app.preprocessing.parsers.fallback import parse_with_fallback
-from app.rag.embeddings import EmbeddingService
-from app.rag.vector_store import FaissVectorStore
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.processing_job_repository import ProcessingJobRepository
 from app.storage.file_store import save_markdown, save_parsed_json, save_raw
@@ -23,59 +22,67 @@ async def process_document(
     project_id: str,
     file_path: Path,
     filename: str,
-    db: AsyncSession,
 ) -> None:
-    doc_repo = DocumentRepository(db)
-    job_repo = ProcessingJobRepository(db)
+    """Run the full document processing pipeline as a background task."""
+    from app.main import app  # Import app locally to avoid circular dependency
 
-    job = await job_repo.create(document_id)
+    async with async_session_factory() as db:
+        doc_repo = DocumentRepository(db)
+        job_repo = ProcessingJobRepository(db)
+        retriever = app.state.retriever
+        embedding_service = retriever.embedding_service
 
-    try:
-        await job_repo.update_status(job.id, "processing", current_step="parsing")
-        await doc_repo.update_status(document_id, "processing")
+        job = await job_repo.create(document_id)
 
-        parsed = parse_with_fallback(file_path)
+        try:
+            await job_repo.update_status(job.id, "processing", current_step="parsing")
+            await doc_repo.update_status(document_id, "processing")
 
-        save_raw(project_id, document_id, filename, file_path.read_bytes())
-        md_path = save_markdown(project_id, document_id, parsed.markdown)
-        json_path = save_parsed_json(project_id, document_id, parsed.structured_data)
+            parsed = parse_with_fallback(file_path)
 
-        await doc_repo.update_status(
-            document_id,
-            "parsed",
-            parser_name=parsed.parser_name,
-            parser_version=parsed.parser_version,
-            markdown_path=str(md_path),
-            parsed_json_path=str(json_path),
-        )
+            save_raw(project_id, document_id, filename, file_path.read_bytes())
+            md_path = save_markdown(project_id, document_id, parsed.markdown)
+            json_path = save_parsed_json(
+                project_id, document_id, parsed.structured_data
+            )
 
-        await job_repo.update_status(job.id, "parsed", current_step="chunking")
+            await doc_repo.update_status(
+                document_id,
+                "parsed",
+                parser_name=parsed.parser_name,
+                parser_version=parsed.parser_version,
+                markdown_path=str(md_path),
+                parsed_json_path=str(json_path),
+            )
 
-        chunks = chunk_markdown(
-            parsed.markdown,
-            document_id=document_id,
-        )
+            await job_repo.update_status(job.id, "parsed", current_step="chunking")
 
-        await doc_repo.update_status(document_id, "chunked")
-        await job_repo.update_status(job.id, "chunked", current_step="embedding")
+            chunks = chunk_markdown(
+                parsed.markdown,
+                document_id=document_id,
+            )
 
-        embedding_service = EmbeddingService()
-        texts = [c["text"] for c in chunks]
-        embeddings = embedding_service.embed_chunks(texts)
+            await doc_repo.update_status(document_id, "chunked")
+            await job_repo.update_status(job.id, "chunked", current_step="embedding")
 
-        vector_store = FaissVectorStore()
-        vector_store.add_chunks(
-            chunk_ids=[c.get("document_id", "") for c in chunks],
-            embeddings=embeddings,
-            metadata=chunks,
-        )
+            texts = [c["text"] for c in chunks]
+            embeddings = embedding_service.embed_chunks(texts)
 
-        await doc_repo.update_status(document_id, "completed")
-        await job_repo.update_status(job.id, "completed", current_step="done")
+            retriever.vector_store.add_chunks(
+                chunk_ids=[c.get("document_id", "") for c in chunks],
+                embeddings=embeddings,
+                metadata=chunks,
+            )
 
-        logger.info("Document %s processed successfully", document_id)
+            await doc_repo.update_status(document_id, "completed")
+            await job_repo.update_status(job.id, "completed", current_step="done")
 
-    except Exception as e:
-        logger.error("Processing failed for %s: %s", document_id, e)
-        await doc_repo.update_status(document_id, "failed", error_message=str(e))
-        await job_repo.update_status(job.id, "failed", error_message=str(e))
+            logger.info("Document %s processed successfully", document_id)
+
+        except Exception as e:
+            logger.error("Processing failed for %s: %s", document_id, e)
+            await doc_repo.update_status(document_id, "failed", error_message=str(e))
+            await job_repo.update_status(job.id, "failed", error_message=str(e))
+        finally:
+            # Clean up the temporary file
+            file_path.unlink(missing_ok=True)

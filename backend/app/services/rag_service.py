@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.llm.base import LLMClient
 from app.rag.prompts import build_qa_prompt
 from app.rag.retriever import Retriever
+from app.repositories.document_repository import DocumentRepository
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +46,7 @@ async def answer_question(
     question: str,
     retriever: Retriever,
     llm: LLMClient,
+    db: AsyncSession,
     project_id: str | None = None,
     document_id: str | None = None,
 ) -> dict[str, Any]:
@@ -58,9 +64,26 @@ async def answer_question(
     answer_text = llm.generate(prompt)
     latency_ms = int((time.perf_counter() - start) * 1000)
 
+    # --- Begin Highlighting Enhancement ---
+    block_bbox_map = {}
+    if document_id:
+        doc_repo = DocumentRepository(db)
+        doc = await doc_repo.get(document_id)
+        if doc and doc.parsed_json_path and Path(doc.parsed_json_path).exists():
+            with open(doc.parsed_json_path) as f:
+                parsed_data = json.load(f)
+            if "blocks" in parsed_data:
+                block_bbox_map = {
+                    block["id"]: block.get("bbox") for block in parsed_data["blocks"]
+                }
+    # --- End Highlighting Enhancement ---
+
     citations = []
     for r in results:
         meta = r.metadata or {}
+        source_block_ids = meta.get("source_block_ids", [])
+        bboxes = [block_bbox_map.get(bid) for bid in source_block_ids if block_bbox_map.get(bid)]
+
         citations.append(
             {
                 "document_id": meta.get("document_id", ""),
@@ -71,6 +94,7 @@ async def answer_question(
                 "section_title": meta.get("section_title", ""),
                 "quote": r.text[:500] if r.text else "",
                 "score": r.score,
+                "bboxes": bboxes,  # Add bboxes for highlighting
             }
         )
 

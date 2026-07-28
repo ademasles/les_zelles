@@ -58,6 +58,9 @@ format-check: ## Check formatting without modifying files
 typecheck: ## Run static type checking
 	$(PYTHON) -m mypy $(PACKAGE)
 
+alembic-upgrade: ## Apply database migrations
+	alembic upgrade head
+
 check: lint format-check typecheck test ## Run all quality checks
 
 clean: ## Remove generated files, caches, and build artefacts
