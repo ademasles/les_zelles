@@ -7,7 +7,7 @@ Goal:
 PDF/DOCX -> Parse -> Chunk -> Retrieve -> Answer -> Cite.
 
 ## Read First
-- REFRACTOR_DECISIONS.md
+- REFACTOR_DECISIONS.md
 - AGENTS.md
 - app/main.py
 - core/config.py
@@ -174,7 +174,7 @@ T10 Alembic + ADRs
 
 ## Priority Order
 1. User request
-2. REFRACTOR_DECISIONS.md
+2. REFACTOR_DECISIONS.md
 3. AGENTS.md
 4. Tests
 5. Convenience
