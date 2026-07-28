@@ -27,9 +27,7 @@ async def query(
         doc_repo = DocumentRepository(db)
         doc = await doc_repo.get(doc_id)
         if not doc or not doc.project_id:
-            raise HTTPException(
-                status_code=404, detail="Document or associated project not found"
-            )
+            raise HTTPException(status_code=404, detail="Document or associated project not found")
 
         question_service = QuestionService(db, retriever)
         result = await question_service.ask_question_on_document(

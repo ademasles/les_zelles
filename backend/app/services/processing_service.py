@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database.session import async_session_factory
 from app.preprocessing.markdown.section_splitter import chunk_markdown
 from app.preprocessing.parsers.fallback import parse_with_fallback
@@ -42,9 +40,7 @@ async def process_document(
 
             save_raw(project_id, document_id, filename, file_path.read_bytes())
             md_path = save_markdown(project_id, document_id, parsed.markdown)
-            json_path = save_parsed_json(
-                project_id, document_id, parsed.structured_data
-            )
+            json_path = save_parsed_json(project_id, document_id, parsed.structured_data)
 
             await doc_repo.update_status(
                 document_id,

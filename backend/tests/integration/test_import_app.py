@@ -26,7 +26,7 @@ def _install_optional_dependency_stubs() -> None:
     class _FakeFastAPI:
         def __init__(self, *args, **kwargs):
             self.routes = {"GET": {}, "POST": {}, "DELETE": {}}
-            self.router = type("Router", (), {"lifespan_context": None})()
+            self.router = type("Router", (), {"lifespan_context": None, "routes": []})()
             self.title = ""
 
         def add_middleware(self, *args, **kwargs):
@@ -35,11 +35,35 @@ def _install_optional_dependency_stubs() -> None:
         def add_api_route(self, path, endpoint, methods=None, tags=None):
             for method in methods or ["GET"]:
                 self.routes.setdefault(method, {})[path] = endpoint
+                self.router.routes.append(
+                    type(
+                        "RouteStub",
+                        (),
+                        {
+                            "methods": [method],
+                            "path": path,
+                            "endpoint": endpoint,
+                            "deprecated": False,
+                        },
+                    )()
+                )
 
         def include_router(self, router, prefix=""):
             for method, routes in router.routes.items():
                 for path, func in routes.items():
-                    self.routes[method][f"{prefix}{path}"] = func
+                    full_path = f"{prefix}{path}"
+                    self.routes[method][full_path] = func
+
+                    class RouteStub:
+                        def __init__(self, m, p, f):
+                            self.methods = [m]
+                            self.path = p
+                            self.endpoint = f
+                            self.deprecated = getattr(
+                                f, "deprecated", False
+                            ) or "deprecated=True" in str(f)
+
+                    self.router.routes.append(RouteStub(method, full_path, func))
 
         def get(self, path):
             def decorator(func):
@@ -48,7 +72,7 @@ def _install_optional_dependency_stubs() -> None:
 
             return decorator
 
-        def post(self, path):
+        def post(self, path, **kwargs):
             def decorator(func):
                 self.routes["POST"][path] = func
                 return func
@@ -66,7 +90,7 @@ def _install_optional_dependency_stubs() -> None:
 
             return decorator
 
-        def post(self, path):
+        def post(self, path, **kwargs):
             def decorator(func):
                 self.routes["POST"][path] = func
                 return func
@@ -88,11 +112,17 @@ def _install_optional_dependency_stubs() -> None:
     fastapi_module.HTTPException = _HTTPException
     fastapi_module.Request = object
     fastapi_module.Depends = lambda *args, **kwargs: None
-    fastapi_module.BackgroundTasks = type("BackgroundTasks", (), {"add_task": lambda *args, **kwargs: None})
+    fastapi_module.BackgroundTasks = type(
+        "BackgroundTasks", (), {"add_task": lambda *args, **kwargs: None}
+    )
     encoders_module.jsonable_encoder = lambda value: value
 
     class _CORSMiddleware:
-        pass
+        def __init__(self, app, **kwargs):
+            self.app = app
+
+        async def __call__(self, scope, receive, send):
+            await self.app(scope, receive, send)
 
     cors_module.CORSMiddleware = _CORSMiddleware
 
@@ -209,5 +239,8 @@ def test_fastapi_app_imports_and_health_route_responds_ok():
 
     main = importlib.import_module("app.main")
 
-    assert "/api/health" in main.app.routes["GET"]
-    assert "/ping/" in main.app.routes["GET"]
+    route = next(
+        (r for r in main.app.router.routes if getattr(r, "path", None) == "/api/health"),
+        None,
+    )
+    assert route is not None

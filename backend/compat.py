@@ -7,19 +7,7 @@ compat_upload embeds chunks and adds them to FAISS so compat_query can retrieve 
 from __future__ import annotations
 
 import json
-import shutil
-from pathlib import Path
 from typing import Any
-
-from app.core.config import settings
-from app.llm.ollama_client import OllamaClient
-from app.preprocessing.markdown.markdown_cleaner import clean_markdown
-from app.preprocessing.markdown.section_splitter import chunk_markdown
-from app.preprocessing.parsers.fallback import parse_with_fallback
-from app.rag.embeddings import EmbeddingService
-from app.rag.prompts import build_summary_prompt
-from app.rag.retriever import Retriever
-from app.storage.file_store import save_markdown, save_parsed_json, save_raw
 
 query_results_store: dict[str, Any] = {}
 
@@ -64,11 +52,3 @@ def compat_save_project(doc_id: str, name: str, results_json: str) -> dict[str, 
         return {"message": "Projet et questions sauvegardes avec succes"}
     finally:
         db.close()
-
-
-def compat_store_feedback(question: str, response: str, score: float) -> dict[str, str]:
-    with open("feedback_dataset.jsonl", "a", encoding="utf-8") as f:
-        json.dump({"question": question, "response": response, "score": score}, f)
-        f.write("\n")
-    return {"status": "ok"}
-

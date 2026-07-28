@@ -41,9 +41,7 @@ async def upload_file(
     and schedules background processing. Returns immediately.
     """
     if not is_allowed_extension(file.filename or ""):
-        raise HTTPException(
-            status_code=400, detail="Only PDF and DOCX files are accepted"
-        )
+        raise HTTPException(status_code=400, detail="Only PDF and DOCX files are accepted")
 
     content = await file.read()
     validate_upload_size(content)
@@ -92,6 +90,4 @@ async def upload_file(
     except Exception as e:
         # Ensure temp file is cleaned up on error
         tmp_path.unlink(missing_ok=True)
-        raise HTTPException(
-            status_code=500, detail=f"Erreur traitement document: {e}"
-        ) from e
+        raise HTTPException(status_code=500, detail=f"Erreur traitement document: {e}") from e
