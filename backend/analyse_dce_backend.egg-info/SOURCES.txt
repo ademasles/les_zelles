@@ -66,7 +66,4 @@ app/services/document_service.py
 app/services/processing_service.py
 app/services/question_service.py
 app/services/rag_service.py
-app/storage/__init__.py
-app/storage/file_store.py
-app/storage/paths.py
 app/utils/__init__.py

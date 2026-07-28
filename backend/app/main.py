@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize database tables
     from database.database import init_legacy_tables
+
     init_legacy_tables()
     await init_db()
 
@@ -50,20 +51,15 @@ async def lifespan(app: FastAPI):
     # Teardown can happen here if needed, e.g., saving the vector store to disk
 
 
-
 def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_title, lifespan=lifespan)
 
     # IMPORTANT: Import and include routers here to avoid circular imports
-    from app.api.routes.uploads import router as uploads_router
-    from app.api.routes.health import health_check
-    from app.api.routes.feedback import router as feedback_router
-    from compat import (
-        compat_save_project,
-    )
-    from fastapi.responses import JSONResponse
-    from fastapi import Form
     from fastapi.middleware.cors import CORSMiddleware
+
+    from app.api.routes.feedback import router as feedback_router
+    from app.api.routes.legacy import router as legacy_router
+    from app.api.routes.uploads import router as uploads_router
 
     app.add_middleware(
         CORSMiddleware,
@@ -78,36 +74,8 @@ def create_app() -> FastAPI:
     app.include_router(projects_router, prefix="/api")
     app.include_router(project_queries_router, prefix="/api")
     app.include_router(feedback_router, prefix="/api")
+    app.include_router(legacy_router)
     app.add_api_route("/api/health", health_check, methods=["GET"], tags=["health"])
-
-    # TODO: Move these legacy routes to their own routers
-    @app.post("/save/")
-    async def save_project(doc_id: str = Form(...), name: str = Form(...), results: str = Form(...)):
-        result = compat_save_project(doc_id, name, results)
-        if "Deja" in result.get("message", ""):
-            return JSONResponse(status_code=409, content=result)
-        return JSONResponse(content=result)
-
-    @app.post("/train/")
-    def trigger_training():
-        feedback_file = settings.feedback_file
-        if not feedback_file.exists():
-            return {"status": "no_feedback_file"}
-        with open(feedback_file, encoding="utf-8") as f:
-            feedback_count = sum(1 for _ in f)
-        if feedback_count < settings.train_threshold:
-            return {"status": "not_enough_feedback", "count": feedback_count}
-        import subprocess
-
-        try:
-            subprocess.run(["python3", "train_cross_encoder.py"], check=True)
-            return {"status": "training_started", "feedback_used": feedback_count}
-        except subprocess.CalledProcessError as e:
-            return {"status": "error", "message": str(e)}
-
-    @app.get("/ping/")
-    def ping():
-        return {"status": "ok"}
 
     return app
 

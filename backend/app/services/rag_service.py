@@ -73,9 +73,7 @@ async def answer_question(
             with open(doc.parsed_json_path) as f:
                 parsed_data = json.load(f)
             if "blocks" in parsed_data:
-                block_bbox_map = {
-                    block["id"]: block.get("bbox") for block in parsed_data["blocks"]
-                }
+                block_bbox_map = {block["id"]: block.get("bbox") for block in parsed_data["blocks"]}
     # --- End Highlighting Enhancement ---
 
     citations = []

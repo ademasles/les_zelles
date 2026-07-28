@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.llm.ollama_client import OllamaClient
-from app.rag.embeddings import EmbeddingService
 from app.rag.retriever import Retriever
 from app.repositories.answer_repository import AnswerRepository, QuestionRepository
 from app.repositories.document_repository import DocumentRepository
@@ -71,9 +70,7 @@ class QuestionService:
         results: dict[str, Any] = {}
 
         for q_label, q_text in queries.items():
-            rag_result = await self.ask_question_on_document(
-                q_text, document_id, doc.project_id
-            )
+            rag_result = await self.ask_question_on_document(q_text, document_id, doc.project_id)
             # Reformat to legacy response structure for the frontend
             results[q_label] = {
                 "question": q_text,

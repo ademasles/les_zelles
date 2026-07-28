@@ -93,7 +93,7 @@ def get_summary(doc_id: str) -> dict[str, Any]:
 
 def submit_feedback(question: str, response: str, score: float) -> dict[str, Any]:
     resp = requests.post(
-        f"{API_URL}/feedback/",
+        f"{API_URL}/api/feedback/",
         json={"question": question, "response": response, "score": score},
         timeout=3000,
     )
