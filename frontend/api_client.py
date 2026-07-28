@@ -27,7 +27,7 @@ def upload_file(file_content: bytes, filename: str, doc_id: str) -> dict[str, An
         f"{API_URL}/upload/",
         files={"file": (filename, file_content)},
         data={"doc_id": doc_id},
-        timeout=30,
+        timeout=3000,
     )
     resp.raise_for_status()
     return resp.json()
@@ -37,7 +37,7 @@ def run_queries(doc_id: str) -> dict[str, Any]:
     resp = requests.post(
         f"{API_URL}/queries/",
         data={"doc_id": doc_id},
-        timeout=120,
+        timeout=1200,
     )
     resp.raise_for_status()
     return resp.json()
@@ -47,7 +47,7 @@ def ask_question(doc_id: str, question: str) -> dict[str, Any]:
     resp = requests.post(
         f"{API_URL}/query/",
         data={"doc_id": doc_id, "question": question},
-        timeout=120,
+        timeout=1200,
     )
     resp.raise_for_status()
     return resp.json()
@@ -57,7 +57,7 @@ def save_project(doc_id: str, name: str, results_json: str) -> dict[str, Any]:
     resp = requests.post(
         f"{API_URL}/save/",
         data={"doc_id": doc_id, "name": name, "results": results_json},
-        timeout=30,
+        timeout=3000,
     )
     resp.raise_for_status()
     return resp.json()
@@ -67,26 +67,26 @@ def add_question_to_project(doc_id: str, question: str, result_json: str) -> dic
     resp = requests.post(
         f"{API_URL}/project_queries/add",
         data={"doc_id": doc_id, "question": question, "result": result_json},
-        timeout=30,
+        timeout=3000,
     )
     resp.raise_for_status()
     return resp.json()
 
 
 def list_projects() -> list[dict[str, Any]]:
-    resp = requests.get(f"{API_URL}/projects/", timeout=10)
+    resp = requests.get(f"{API_URL}/projects/", timeout=3000)
     resp.raise_for_status()
     return resp.json()
 
 
 def get_project_queries(doc_id: str) -> dict[str, Any]:
-    resp = requests.get(f"{API_URL}/project_queries/{doc_id}", timeout=10)
+    resp = requests.get(f"{API_URL}/project_queries/{doc_id}", timeout=3000)
     resp.raise_for_status()
     return resp.json()
 
 
 def get_summary(doc_id: str) -> dict[str, Any]:
-    resp = requests.get(f"{API_URL}/summary/", params={"doc_id": doc_id}, timeout=60)
+    resp = requests.get(f"{API_URL}/summary/", params={"doc_id": doc_id}, timeout=3000)
     resp.raise_for_status()
     return resp.json()
 
@@ -95,7 +95,7 @@ def submit_feedback(question: str, response: str, score: float) -> dict[str, Any
     resp = requests.post(
         f"{API_URL}/feedback/",
         json={"question": question, "response": response, "score": score},
-        timeout=10,
+        timeout=3000,
     )
     resp.raise_for_status()
     return resp.json()

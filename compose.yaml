@@ -32,8 +32,6 @@ services:
 
   ollama:
     image: ollama/ollama
-    profiles:
-      - ollama
     ports:
       - "11434:11434"
     volumes:
@@ -43,15 +41,13 @@ services:
 
   ollama-init:
     image: curlimages/curl:latest
-    profiles:
-      - ollama
     depends_on:
       - ollama
     entrypoint: >
       sh -c '
       until curl -s http://ollama:11434; do sleep 2; done;
       curl -X POST http://ollama:11434/api/pull \
-        -d "{\"name\":\"mistral\"}" \
+        -d "{\"name\":\"gemma4:e4b\"}" \
         -H "Content-Type: application/json"
       '
     restart: "no"

@@ -1,181 +1,148 @@
 # Analyse IA d’Appels d’Offres (CCTP) – Analyse-DCE
 
-Ce projet propose une application complète d’analyse intelligente des documents d’appels d’offres (CCTP), permettant :
-- L’import et l’analyse de documents PDF ou DOCX (y compris scannés avec OCR)
-- L’extraction, le résumé et la génération de questions/réponses sur le contenu
-- Une interface web interactive avec Streamlit pour l’analyse et la gestion des projets
+This project provides a comprehensive application for the intelligent analysis of tender documents (CCTP in French). It allows users to upload documents, extract information, and perform semantic question-answering through a web interface.
 
 ---
 
-## Structure du projet
+## Architecture Overview
 
-```bash
-analyse-dce/
-|   .env
-|   docker-compose.yml
-|   README.md
-|
-+---backend/     # Backend FastAPI et logique métier
-|   |   Dockerfile      # Image docker backend
-|   |   main.py     # Point d’entrée FastAPI
-|   |   Makefile     # Commandes locales backend
-|   |   pyproject.toml        # Dépendances et tooling backend
-|   |   queries.json        # Cache des requêtes traitées
-|   |
-|   +---database/
-|   |       database.py     # Gestion base de données
-|   |
-|   +---nlp/     # Modules NLP (QA, résumé, filtering)
-|   |       filtering.py
-|   |       qa.py       # Gestion des LLM pour le Q&A
-|   |       summarization.py        # Gestion des LLM pour la synthèse
-|   |       train_cross_encoder.py      # Gestion de l'entraînement du CrossEncoder
-|   |
-|   +---preprocessing/       # Nettoyage, extraction, chunking
-|   |       chunking.py
-|   |       cleaning.py
-|   |       extraction.py
-|   |       loading.py
-|   |
-|   +---utils/       # Utilitaires
-|   |       highlight.py        # Surlignage segment dans doc
-|   |
-|
-\---frontend/        # Interface utilisateur Streamlit
-        app.py      # Code frontend Streamlit
-        Dockerfile      # Image docker frontend
-        requirements.txt        # Dépendances frontend
+The project follows a modern, decoupled architecture with a FastAPI backend and a Streamlit frontend.
+
+-   **Backend**: A Python backend built with FastAPI, following clean architecture principles. It handles all business logic, including document processing, RAG pipeline execution, and database interactions.
+-   **Frontend**: A Streamlit web application that serves as the user interface. It is a pure client that interacts with the backend via a REST API.
+-   **LLM Service**: An Ollama container that serves the `gemma4:e4b` model for generative tasks.
+-   **Database**: A PostgreSQL database (managed via Docker) for persisting project and analysis data.
+
+### Backend Architecture
+
+The backend code is organized into a modular and scalable structure within the `backend/` directory, following clean architecture principles:
+
 ```
-## Installation et lancement
-
-### 1. Prérequis
-Python 3.10+
-
-Docker et Docker Compose (optionnel mais recommandé)
-
-`docx2pdf` reste optionnel pour la conversion DOCX -> PDF hors Linux Docker.
-
-```bash
-sudo apt install libreoffice tesseract-ocr
+backend/
+├── alembic/              # Alembic database migrations
+├── app/                  # Main application source code
+│   ├── api/              # FastAPI routers and input schemas
+│   │   └── routes/       # API endpoint definitions (documents, projects, etc.)
+│   ├── core/             # Core services: config, logging, security
+│   ├── database/         # SQLAlchemy session management and base models
+│   ├── llm/              # LLM client abstractions (e.g., Ollama)
+│   ├── models/           # SQLAlchemy ORM models
+│   ├── preprocessing/    # Document processing pipeline
+│   │   ├── parsers/      # Document parsers (PDF, DOCX, OCR)
+│   │   └── markdown/     # Markdown cleaning and splitting
+│   ├── rag/              # RAG pipeline components
+│   │   ├── embeddings.py # Embedding generation
+│   │   ├── prompts.py    # Prompt templates
+│   │   ├── retriever.py  # FAISS-based retriever
+│   │   └── vector_store.py # Vector store abstraction
+│   ├── repositories/     # Data access layer (CRUD operations for each model)
+│   └── services/         # Business logic orchestration (processing, RAG)
+├── alembic.ini           # Alembic configuration
+├── Dockerfile            # Container definition for the backend
+├── Makefile              # Development commands for linting, testing, running, etc.
+├── pyproject.toml        # Project metadata and dependencies (for uv)
+└── tests/                # Pytest tests (unit, integration, golden)
 ```
 
-### 2. Installation manuelle
-Cloner le dépôt :
+## Getting Started
 
-```bash
-git clone https://github.com/demaslesa/les_zelles.git
-cd analyse-dce
-```
-Create and activate a Python virtual environment:
+### Prerequisites
 
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-.\.venv\Scripts\activate   # Windows
-python -m pip install -U pip
-pip install -e ".[dev]"
-```
+-   Python 3.11+
+-   [uv](https://github.com/astral-sh/uv) (recommended for Python dependency management)
+-   Docker and Docker Compose
+-   System tools for OCR and document conversion:
+    ```bash
+    # On Debian/Ubuntu
+    sudo apt-get update && sudo apt-get install -y libreoffice tesseract-ocr
+    ```
 
-- Frontend dependencies stay separate for now.
-- Installer les dépendances frontend :
+### Environment Configuration
 
-```bash
-pip install -r frontend/requirements.txt
-```
-### 2.5 Configuration d'environnement
-
-Copier `.env.example` vers `.env` et adapter valeurs locales si nécessaire :
+Copy the example `.env.example` file to a new `.env` file and customize the variables if needed. This file is ignored by Git.
 
 ```bash
 cp .env.example .env
-# then edit .env
 ```
 
-If `.env` already tracked in git, remove from index (local only):
+### 1. Running with Docker (Recommended)
 
-```bash
-git rm --cached .env
-git commit -m "Remove local env from repo"
-```
+The simplest way to run the entire application stack is with Docker Compose.
 
-Ne pas committer `.env`. `.env.example` contient valeurs sûres pour démarrage local.
+-   **Build and launch all services (Backend, Frontend, DB):**
+    ```bash
+    docker-compose up --build
+    ```
 
-### 3. Lancer l’application
-- Backend (FastAPI)
+-   **Launch with the local LLM service (Ollama):**
+    To include the local Ollama service for the RAG pipeline, use the `ollama` profile.
+    ```bash
+    docker-compose --profile ollama up --build
+    ```
+    *Note: The first time you run this, it will download the LLM model (`gemma4:e4b`), which may take some time.*
 
-```bash
-uvicorn app.main:app --reload
-```
-- Frontend (Streamlit)
-```bash
-streamlit run frontend/app.py
-```
-### 4. Lancer avec Docker (optionnel)
-Build et lancement via docker-compose :
+### 2. Local Development
 
-bash
-Copier
-Modifier
-docker-compose up --build
-Cela démarre backend et frontend avec leurs images respectives.
+For development, you can run the services manually. The `backend/Makefile` provides convenient shortcuts for most tasks.
 
-## Fichiers importants
-```bash
-backend/main.py # API REST principale avec gestion upload, QA, feedback, etc.
+1.  **Install Dependencies:**
+    - **Backend:**
+      ```bash
+      cd backend
+      uv pip sync pyproject.toml --all-extras
+      cd ..
+      ```
+    - **Frontend:**
+      ```bash
+      uv pip install -r frontend/requirements.txt
+      ```
 
-frontend/app.py # interface utilisateur avec menu, upload, questions, historique
+2.  **Run Database Migrations:**
+    From the `backend/` directory:
+    ```bash
+    make alembic-upgrade
+    ```
 
-backend/preprocessing/ # extraction de texte, nettoyage, découpage en chunks
+3.  **Run the Development Servers:**
+    - **Backend (FastAPI):**
+      From the `backend/` directory:
+      ```bash
+      make run
+      ```
+    - **Frontend (Streamlit):**
+      From the project root directory:
+      ```bash
+      streamlit run frontend/app.py
+      ```
 
-backend/nlp/ # modules pour résumé, questions/réponses, filtrage
+4.  **Code Quality & Testing:**
+    From the `backend/` directory, you can use the Makefile to run checks:
+    ```bash
+    # Run all checks (lint, format, types, tests)
+    make check
 
-backend/utils/highlight.py # génération PDF surligné
+    # Run only tests
+    make test
 
-backend/database/ # connexion base de données (SQLAlchemy)
+    # Auto-format the code
+    make format
+    ```
 
-backend/queries.json # exemple de résultats
-```
-## Fonctionnalités clés
-- Import de documents PDF/DOCX (support OCR pour documents scannés)
+## Key Technologies
 
-- Analyse automatique avec NLP (résumé, extraction de critères techniques)
+-   **Backend**: Python, FastAPI, SQLAlchemy, Alembic, `sentence-transformers`, FAISS, PyMuPDF, Tesseract
+-   **Frontend**: Streamlit
+-   **LLM**: Ollama (`gemma4:e4b`)
+-   **Database**: PostgreSQL
+-   **DevOps**: Docker, pre-commit, Ruff, MyPy
 
-- Génération et réponses aux questions en langage naturel
+## Project Conventions
 
-- Interface Streamlit pour consultation, feedback et gestion de projets
-
-- Sauvegarde des projets et questions dans base SQL locale
-
-- Surlignage dynamique des extraits dans PDF générés
-
-## Technologies utilisées
-- Backend : Python, FastAPI, Uvicorn, PyMuPDF, Tesseract, SQLAlchemy, Hugging Face Transformers, Faiss
-
-- Frontend : Streamlit, streamlit-option-menu, streamlit-tags
-
-- OCR : Tesseract OCR
-
-- Conversion DOCX ➔ PDF : LibreOffice
-
-- Modèle LLM : Mistral 7B (via Ollama ou autre)
-
-## Prérequis système
-- Tesseract OCR (https://github.com/tesseract-ocr/tesseract)
-
-- LibreOffice en ligne de commande (pour conversion DOCX en PDF)
-
-## Notes
-- Veiller à ce que les chemins de fichiers et variables d’environnement soient correctement configurés
-
-- La taille et qualité des documents peuvent impacter la rapidité et pertinence des analyses
-
-- Le modèle LLM utilisé doit être adapté à la machine (GPU recommandé)
+-   **Code Quality**: We use `ruff` for linting/formatting and `mypy` for type checking. These are enforced via `pre-commit` hooks.
+-   **Dependency Management**: Backend dependencies are managed with `uv` via `pyproject.toml`.
+-   **Testing**: Tests are written with `pytest` and are located in the `backend/tests/` directory.
 
 ## Contact
-Anton Demasles
-✉️ demaslesa@gmail.com
 
-
-
-*N’hésite pas à contribuer, signaler des bugs ou proposer des améliorations !*
+-   **Author**: Anton Demasles
+-   **Email**: demaslesa@gmail.com

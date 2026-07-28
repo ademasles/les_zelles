@@ -57,7 +57,7 @@ Current: FAISS.
 
 ### LLM
 Use LLMClient abstraction.
-Current: Ollama/Mistral.
+Current: Ollama (`gemma4:e4b`).
 
 ## RAG Rules
 Docling Markdown -> chunking/RAG.
@@ -155,11 +155,14 @@ For every ticket:
 No big-bang rewrites.
 
 ## Validation
-ruff check .
-ruff format --check .
-mypy app
-pytest
+Run these checks from the `backend/` directory before committing:
+```bash
+ruff check . && ruff format --check . && mypy app && pytest
+```
+To run the web server for manual testing:
+```bash
 uvicorn app.main:app --reload
+```
 
 ## Roadmap
 T2 Storage/DB

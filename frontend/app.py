@@ -73,6 +73,8 @@ elif selected == "Analyser un document":
                                 **Score :** `{resp['score']:.3f}`
                                 **Page :** `{resp['page_number']}`
                                 """)
+                                if "bboxes" in resp and resp["bboxes"]:
+                                    st.json(resp["bboxes"])
                                 st.markdown("**Synthese du segment :**")
                                 st.info(resp.get('summary', 'Aucune synthese disponible.'))
 
@@ -126,6 +128,8 @@ elif selected == "Questions sur le DCE":
                         **Score :** `{resp['score']:.3f}`
                         **Page :** `{resp['page_number']}`
                         """)
+                        if "bboxes" in resp and resp["bboxes"]:
+                            st.json(resp["bboxes"])
                         st.markdown("**Synthese du segment :**")
                         st.info(resp.get("summary", "Aucune synthese disponible."))
 
