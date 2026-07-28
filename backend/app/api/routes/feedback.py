@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db
 from app.repositories.feedback_repository import FeedbackRepository
-from fastapi import APIRouter, Depends
 
 router = APIRouter(tags=["feedback"])
 
@@ -21,8 +21,7 @@ class FeedbackEntry(BaseModel):
 @router.post("/feedback/")
 async def store_feedback(entry: FeedbackEntry, db: AsyncSession = Depends(get_db)):
     """Stores a new feedback entry."""
-    feedback_repo = FeedbackRepository(db)
-    await feedback_repo.create(
+    FeedbackRepository.store_legacy_feedback(
         question=entry.question, response=entry.response, score=entry.score
     )
     return {"status": "ok"}

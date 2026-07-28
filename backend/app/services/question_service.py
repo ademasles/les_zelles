@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.llm.ollama_client import OllamaClient
-from app.rag.embeddings import EmbeddingService
 from app.rag.retriever import Retriever
 from app.repositories.answer_repository import AnswerRepository, QuestionRepository
 from app.repositories.document_repository import DocumentRepository

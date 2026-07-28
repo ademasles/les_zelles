@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.database.session import async_session_factory
 from app.preprocessing.markdown.section_splitter import chunk_markdown
 from app.preprocessing.parsers.fallback import parse_with_fallback

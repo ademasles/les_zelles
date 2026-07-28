@@ -55,15 +55,13 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_title, lifespan=lifespan)
 
     # IMPORTANT: Import and include routers here to avoid circular imports
-    from app.api.routes.uploads import router as uploads_router
-    from app.api.routes.health import health_check
-    from app.api.routes.feedback import router as feedback_router
-    from compat import (
-        compat_save_project,
-    )
-    from fastapi.responses import JSONResponse
     from fastapi import Form
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+
+    from app.api.routes.feedback import router as feedback_router
+    from app.api.routes.uploads import router as uploads_router
+    from app.repositories.project_repository import ProjectRepository
 
     app.add_middleware(
         CORSMiddleware,
@@ -83,7 +81,7 @@ def create_app() -> FastAPI:
     # TODO: Move these legacy routes to their own routers
     @app.post("/save/")
     async def save_project(doc_id: str = Form(...), name: str = Form(...), results: str = Form(...)):
-        result = compat_save_project(doc_id, name, results)
+        result = ProjectRepository.save_legacy_project(doc_id, name, results)
         if "Deja" in result.get("message", ""):
             return JSONResponse(status_code=409, content=result)
         return JSONResponse(content=result)

@@ -6,31 +6,15 @@ No parsing, chunking, embedding, LLM, or database logic here.
 
 from __future__ import annotations
 
-from pathlib import Path
-from tempfile import NamedTemporaryFile
-
 import uvicorn
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.security import is_allowed_extension, validate_upload_size
-from app.database.session import get_db
-from app.rag.retriever import Retriever
-from app.api.dependencies import get_retriever
-from app.repositories.document_repository import DocumentRepository
+from app.repositories.feedback_repository import FeedbackRepository
 from app.repositories.project_repository import ProjectRepository
-from app.services.document_service import DocumentService
-from app.services.processing_service import process_document
-from app.services.question_service import QuestionService
-from compat import (
-    compat_save_project,
-    compat_store_feedback,
-)
-from utils.highlight import highlight_chunk
 
 app = FastAPI()
 
@@ -44,7 +28,7 @@ app.add_middleware(
 
 @app.post("/save/")
 async def save_project(doc_id: str = Form(...), name: str = Form(...), results: str = Form(...)):
-    result = compat_save_project(doc_id, name, results)
+    result = ProjectRepository.save_legacy_project(doc_id, name, results)
     if "Deja" in result.get("message", ""):
         return JSONResponse(status_code=409, content=result)
     return JSONResponse(content=result)
@@ -58,7 +42,8 @@ class FeedbackEntry(BaseModel):
 
 @app.post("/feedback/")
 def store_feedback(entry: FeedbackEntry):
-    return compat_store_feedback(entry.question, entry.response, entry.score)
+    FeedbackRepository.store_legacy_feedback(entry.question, entry.response, entry.score)
+    return {"status": "ok"}
 
 
 @app.post("/train/")
