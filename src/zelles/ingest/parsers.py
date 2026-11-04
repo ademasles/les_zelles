@@ -14,6 +14,7 @@ Docling can be enabled for complex layouts (``ZELLES_PARSER=docling``).
 from __future__ import annotations
 
 import io
+import itertools
 import logging
 import shutil
 import subprocess
@@ -24,6 +25,7 @@ from typing import Protocol
 
 from zelles.domain.documents import BBox, Block, BlockKind, Page, ParsedDocument
 from zelles.ingest.cleaning import clean_text
+from zelles.ingest.furniture import strip_furniture
 from zelles.ingest.outline import detect_heading
 
 log = logging.getLogger(__name__)
@@ -140,6 +142,7 @@ class PdfiumParser:
 
         doc = ParsedDocument(filename=filename, media_type=PDF, parser=self.name)
         pdf = pdfium.PdfDocument(data)
+        raw: list[tuple[list[tuple[str, BBox | None]], float | None]] = []
         try:
             for index in range(len(pdf)):
                 page = pdf[index]
@@ -155,19 +158,14 @@ class PdfiumParser:
                         doc.warnings.append(
                             f"page {number} has no text layer and OCR is unavailable"
                         )
-                blocks = _blocks_from_lines(lines, number)
-                doc.blocks.extend(blocks)
-                doc.pages.append(
-                    Page(
-                        number=number,
-                        width=width,
-                        height=height,
-                        text="\n".join(b.text for b in blocks),
-                        ocr=ocr_used,
-                    )
-                )
+                raw.append((lines, height))
+                doc.pages.append(Page(number=number, width=width, height=height, ocr=ocr_used))
         finally:
             pdf.close()
+        for page_info, lines in zip(doc.pages, strip_furniture(raw), strict=True):
+            blocks = _blocks_from_lines(lines, page_info.number)
+            doc.blocks.extend(blocks)
+            page_info.text = "\n".join(b.text for b in blocks)
         return doc
 
     @staticmethod
@@ -225,7 +223,13 @@ def _merge(
     segments: list[tuple[float, float, float, float, str]], page_height: float
 ) -> tuple[str, BBox]:
     segments.sort(key=lambda s: s[0])
-    text = " ".join(s[4] for s in segments)
+    # pdfium splits a word into several rects when the font size changes inside
+    # it (small capitals: "O" + "BJET"). Glue rects that touch; space the others.
+    height = max(s[3] - s[1] for s in segments) or 1.0
+    text = segments[0][4]
+    for prev, seg in itertools.pairwise(segments):
+        glued = seg[0] - prev[2] < 0.1 * height and prev[4][-1:].isalnum() and seg[4][:1].isalnum()
+        text += seg[4] if glued else " " + seg[4]
     box = BBox(
         x0=min(s[0] for s in segments),
         y0=page_height - max(s[3] for s in segments),
