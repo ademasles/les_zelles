@@ -4,7 +4,7 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [0.2.0] - unreleased
 
-Complete rewrite as an installable Python package (`zelles`).
+Complete rewrite as an installable Python package (`zelles`). The project is now proprietary (source public, all rights reserved).
 
 ### Added
 - Ingestion of PDF, DOCX, TXT and Markdown with line bounding boxes, Tesseract OCR fallback and CCTP outline detection (lots, articles).

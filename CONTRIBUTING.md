@@ -1,6 +1,6 @@
-# Contributing
+# Development guide
 
-Thanks for helping. Issues and pull requests are welcome, in English or French.
+This is a proprietary project. External pull requests are not accepted without a prior written agreement; bug reports through issues are welcome.
 
 ## Setup
 
@@ -27,4 +27,4 @@ make check
 
 ## Adding a golden case
 
-Anonymise the CCTP (project name, addresses, people, companies), put it in `evals/golden/<case>/` with an `expected.json`, and say in the pull request where it comes from and that you are allowed to share it. See [docs/evaluation.md](docs/evaluation.md).
+Anonymise the CCTP (project name, addresses, people, companies), put it in `evals/golden/<case>/` with an `expected.json`, and record where it comes from and that it may be used. The repository is public, so only commit documents cleared for publication. See [docs/evaluation.md](docs/evaluation.md).

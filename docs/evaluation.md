@@ -28,4 +28,4 @@ A prediction matches an expected requirement when the field is the same and eith
 
 There is one synthetic case (`residence_tilleuls`, a Lot 05 with PVC dwellings, an aluminium hall, shutters and air inlets). Rules alone score a micro F1 of 0.97 on it. This number is optimistic: the case was written alongside the rules.
 
-The most useful contribution to this project is a real CCTP, anonymised, with its `expected.json`. Three to five real cases covering PVC, aluminium and wood, renovation and new build, are enough to make model comparisons meaningful.
+The most useful next step is a real CCTP, anonymised, with its `expected.json`. Three to five real cases covering PVC, aluminium and wood, renovation and new build, are enough to make model comparisons meaningful.

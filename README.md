@@ -110,7 +110,7 @@ make install   # uv sync + pre-commit hooks
 make check     # ruff, mypy --strict, pytest, eval gate
 ```
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md) before a larger change. The most valuable contribution is an anonymised real CCTP with its expected requirements in `evals/golden/`.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md) before a larger change.
 
 ## Limits
 
@@ -120,4 +120,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architec
 
 ## License
 
-[Apache-2.0](LICENSE).
+Proprietary. The source is public for reference only; all rights reserved. See [LICENSE](LICENSE).
