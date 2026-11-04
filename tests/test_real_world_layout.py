@@ -208,3 +208,14 @@ def test_xlsx_export_drops_illegal_characters() -> None:
     )
     sheet = SpecSheet(document_id="0" * 16, filename="x.pdf", model="rules", requirements=[req])
     assert to_xlsx(sheet)[:2] == b"PK"
+
+
+def test_handle_height_is_an_accessibility_requirement() -> None:
+    found = _extract("Les poignées seront placées à une hauteur maximale de 1,30 m du sol.")
+    assert any("1,30 m" in v for v in found[SpecField.ACCESSIBILITY])
+
+
+def test_air_inlet_attenuation_is_not_facade_acoustics() -> None:
+    found = _extract("Entrée d'air hygro-régulée, affaiblissement acoustique 37 dB.")
+    assert SpecField.ACOUSTIC not in found
+    assert any("37 dB" in v for v in found[SpecField.AIR_INLETS])

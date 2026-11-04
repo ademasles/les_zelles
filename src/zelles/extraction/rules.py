@@ -96,6 +96,7 @@ RULES: list[Rule] = [
             _I,
         ),
         0.75,
+        excludes=re.compile(r"entrées?\s+d'air|hygro|bouches?|mortaises?|grilles?", _I),
         normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(  # further values in the same sentence: "..., 28 dB pour les autres façades"
@@ -245,7 +246,8 @@ RULES: list[Rule] = [
     Rule(
         F.ACCESSIBILITY,
         re.compile(
-            r"\bPMR\b[^.;\n]{0,60}|\bseuil[^.;,\n]{0,60}|\beffort de man(?:œ|oe)uvre[^.;,\n]{0,40}",
+            r"\bPMR\b[^.;\n]{0,60}|\bseuil[^.;,\n]{0,60}|\beffort de man(?:œ|oe)uvre[^.;,\n]{0,40}"
+            r"|\b(?:hauteur|poignées?|organes?\s+de\s+man(?:œ|oe)uvre|commandes?)\b[^.;\n]{0,50}?\b[01][.,]\d{2}\s*m\b",
             _I,
         ),
         0.65,
