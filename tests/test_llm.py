@@ -1,0 +1,87 @@
+import httpx
+import pytest
+import respx
+from pydantic import BaseModel
+
+from zelles.config import Settings
+from zelles.llm.base import LLMError, Message
+from zelles.llm.openai_compat import OpenAICompatibleLLM, extract_json
+from zelles.llm.registry import create_llm, split_spec
+
+URL = "http://llm.test/v1/chat/completions"
+
+
+class Out(BaseModel):
+    value: int
+
+
+def _reply(content: str, prompt: int = 10, completion: int = 5) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "choices": [{"message": {"content": content}}],
+            "usage": {"prompt_tokens": prompt, "completion_tokens": completion},
+        },
+    )
+
+
+def test_split_spec_keeps_model_tags() -> None:
+    assert split_spec("ollama:qwen3:8b") == ("ollama", "qwen3:8b")
+    with pytest.raises(LLMError):
+        split_spec("qwen3")
+
+
+def test_registry() -> None:
+    settings = Settings(llm_model="none")
+    assert create_llm("none", settings) is None
+    llm = create_llm("ollama:qwen3:8b", settings)
+    assert llm is not None and llm.name == "ollama:qwen3:8b"
+    with pytest.raises(LLMError):
+        create_llm("acme:model", settings)
+
+
+def test_extract_json_tolerates_fences() -> None:
+    assert extract_json('```json\n{"value": 3}\n```') == {"value": 3}
+    assert extract_json('Sure! {"value": 4} done') == {"value": 4}
+
+
+@respx.mock
+async def test_structured_output_with_local_pricing() -> None:
+    route = respx.post(URL).mock(return_value=_reply('{"value": 7}'))
+    llm = OpenAICompatibleLLM("ollama", "qwen3:8b", base_url="http://llm.test/v1")
+    result = await llm.complete(system="s", messages=[Message("user", "u")], schema=Out)
+    assert result.parsed == Out(value=7)
+    assert result.usage.cost_usd == 0.0
+    sent = route.calls[0].request.read()
+    assert b'"json_schema"' in sent and b'"temperature":0' in sent
+
+
+@respx.mock
+async def test_repair_round_trip() -> None:
+    respx.post(URL).mock(side_effect=[_reply('{"value": "seven"}'), _reply('{"value": 7}')])
+    llm = OpenAICompatibleLLM("vllm", "m", base_url="http://llm.test/v1")
+    result = await llm.complete(system="s", messages=[Message("user", "u")], schema=Out)
+    assert result.parsed == Out(value=7)
+    assert result.usage.calls == 2
+
+
+@respx.mock
+async def test_falls_back_to_json_mode() -> None:
+    route = respx.post(URL).mock(
+        side_effect=[
+            httpx.Response(400, text="response_format json_schema unsupported"),
+            _reply('{"value": 1}'),
+        ]
+    )
+    llm = OpenAICompatibleLLM("llamacpp", "m", base_url="http://llm.test/v1")
+    result = await llm.complete(system="s", messages=[Message("user", "u")], schema=Out)
+    assert result.parsed == Out(value=1)
+    assert b'"json_object"' in route.calls[1].request.read()
+
+
+@respx.mock
+async def test_retries_then_fails() -> None:
+    respx.post(URL).mock(return_value=httpx.Response(503, text="busy"))
+    llm = OpenAICompatibleLLM("openai", "m", base_url="http://llm.test/v1", max_retries=1)
+    with pytest.raises(LLMError, match="503"):
+        await llm.complete(system="s", messages=[Message("user", "u")])

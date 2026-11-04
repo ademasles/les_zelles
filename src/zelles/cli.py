@@ -1,0 +1,271 @@
+"""Command-line interface: ``zelles analyze``, ``ask``, ``agent``, ``serve``, ``mcp``, ``eval``."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from pathlib import Path
+from typing import Annotated
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from zelles import __version__
+from zelles.config import Settings, get_settings
+from zelles.domain.spec import FIELD_CATALOG, RequirementStatus, SpecSheet
+from zelles.exports import to_csv, to_xlsx
+from zelles.llm.registry import create_embedder, create_llm
+from zelles.observability import configure_logging
+
+app = typer.Typer(
+    help="Cited, verified analysis of joinery tender specifications (CCTP).", no_args_is_help=True
+)
+console = Console()
+
+ModelOpt = Annotated[
+    str | None, typer.Option("--model", "-m", help="provider:model, or 'none' for rules only")
+]
+EmbedOpt = Annotated[
+    str | None, typer.Option("--embeddings", "-e", help="provider:model for hybrid search")
+]
+
+
+def _settings(model: str | None, embeddings: str | None) -> Settings:
+    base = get_settings()
+    update: dict[str, object] = {}
+    if model is not None:
+        update["llm_model"] = model
+    if embeddings is not None:
+        update["embedding_model"] = embeddings
+    settings = base.model_copy(update=update)
+    configure_logging(settings.log_level, json_output=settings.log_json)
+    return settings
+
+
+def _print_sheet(sheet: SpecSheet) -> None:
+    table = Table(title=f"{sheet.filename} · {sheet.model}", show_lines=False)
+    for col in ("Field", "Value", "Scope", "Where", "Status"):
+        table.add_column(col, overflow="fold")
+    colors = {
+        RequirementStatus.VERIFIED: "green",
+        RequirementStatus.UNVERIFIED: "yellow",
+        RequirementStatus.INVALID: "red",
+    }
+    for req in sheet.requirements:
+        table.add_row(
+            FIELD_CATALOG[req.field].label,
+            req.value,
+            req.scope or "",
+            req.citation.locator if req.citation else "",
+            f"[{colors[req.status]}]{req.status.value}[/] {req.confidence:.0%}",
+        )
+    console.print(table)
+    usage = sheet.usage
+    cost = f"${usage.cost_usd:.4f}" if usage.cost_usd is not None else "n/a"
+    console.print(
+        f"{len(sheet.requirements)} requirements · coverage {sheet.coverage():.0%} · "
+        f"{usage.calls} LLM calls · {usage.input_tokens + usage.output_tokens} tokens · cost {cost} · "
+        f"{usage.seconds:.1f}s"
+    )
+    if sheet.summary:
+        console.print(f"\n[bold]Brief[/]\n{sheet.summary}")
+    for warning in sheet.warnings:
+        console.print(f"[yellow]warning:[/] {warning}")
+
+
+@app.command()
+def analyze(
+    file: Annotated[
+        Path, typer.Argument(exists=True, dir_okay=False, help="CCTP as PDF, DOCX, TXT or MD")
+    ],
+    model: ModelOpt = None,
+    embeddings: EmbedOpt = None,
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Write .json, .csv or .xlsx")
+    ] = None,
+    save: Annotated[bool, typer.Option(help="Store in the workspace for ask/agent/serve")] = True,
+) -> None:
+    """Analyse a CCTP and print its spec sheet."""
+    settings = _settings(model, embeddings)
+
+    async def run() -> SpecSheet:
+        from zelles.pipeline import analyze as run_pipeline  # noqa: PLC0415
+
+        llm = create_llm(settings.llm_model, settings)
+        embedder = create_embedder(settings.embedding_model, settings)
+        try:
+            with console.status("Analysing...") as status:
+
+                async def progress(stage: str, fraction: float, message: str) -> None:
+                    status.update(f"[{fraction:.0%}] {message}")
+
+                analysis = await run_pipeline(
+                    file.read_bytes(),
+                    file.name,
+                    settings=settings,
+                    llm=llm,
+                    embedder=embedder,
+                    progress=progress,
+                )
+            if save:
+                from zelles.storage.workspace import Workspace  # noqa: PLC0415
+
+                workspace = Workspace(settings)
+                workspace.register(
+                    analysis.document_id, file.name, analysis.document.media_type, file.read_bytes()
+                )
+                workspace.save(analysis)
+                console.print(f"Saved as document [bold]{analysis.document_id}[/]")
+            return analysis.sheet
+        finally:
+            if llm:
+                await llm.aclose()
+            if embedder:
+                await embedder.aclose()
+
+    sheet = asyncio.run(run())
+    _print_sheet(sheet)
+    if output:
+        suffix = output.suffix.lower()
+        if suffix == ".json":
+            output.write_text(sheet.model_dump_json(indent=2))
+        elif suffix == ".csv":
+            output.write_text(to_csv(sheet), encoding="utf-8-sig")
+        elif suffix == ".xlsx":
+            output.write_bytes(to_xlsx(sheet))
+        else:
+            raise typer.BadParameter("output must end with .json, .csv or .xlsx")
+        console.print(f"Wrote {output}")
+
+
+@app.command()
+def ask(
+    document_id: Annotated[str, typer.Argument(help="Id printed by 'zelles analyze'")],
+    question: Annotated[str, typer.Argument()],
+    model: ModelOpt = None,
+) -> None:
+    """Ask a question about an analysed CCTP and get a cited answer."""
+    settings = _settings(model, None)
+
+    async def run() -> None:
+        from zelles.qa import answer_question  # noqa: PLC0415
+        from zelles.storage.workspace import Workspace  # noqa: PLC0415
+
+        llm = create_llm(settings.llm_model, settings)
+        workspace = Workspace(
+            settings, embedder=create_embedder(settings.embedding_model, settings)
+        )
+        doc = await workspace.load(document_id)
+        answer = await answer_question(question, doc.index, llm, k=settings.retrieval_top_k)
+        console.print(answer.answer)
+        for cite in answer.citations:
+            mark = "✓" if cite.match_score >= 0.88 else "?"
+            console.print(f"  {mark} [{cite.chunk_id}] {cite.locator}: “{cite.quote[:160]}”")
+        if llm:
+            await llm.aclose()
+
+    asyncio.run(run())
+
+
+@app.command()
+def agent(
+    question: Annotated[str, typer.Argument()],
+    document_id: Annotated[str | None, typer.Option("--doc", "-d")] = None,
+    model: ModelOpt = None,
+    max_steps: int = 8,
+    trace: Annotated[bool, typer.Option(help="Print every tool call")] = False,
+) -> None:
+    """Let the agent answer using the tools (search, requirements, graph, product checks)."""
+    settings = _settings(model, None)
+
+    async def run() -> None:
+        from zelles.agent.loop import Agent  # noqa: PLC0415
+        from zelles.agent.tools import ToolContext  # noqa: PLC0415
+        from zelles.storage.workspace import Workspace  # noqa: PLC0415
+
+        llm = create_llm(settings.llm_model, settings)
+        if llm is None:
+            raise typer.BadParameter("the agent needs a model: --model ollama:qwen3:8b")
+        workspace = Workspace(settings)
+
+        async def list_docs() -> list[dict[str, object]]:
+            return workspace.list_documents()
+
+        result = await Agent(llm, ToolContext(workspace.load, list_docs), max_steps=max_steps).run(
+            question, document_id=document_id
+        )
+        if trace:
+            for i, step in enumerate(result.steps, 1):
+                console.print(
+                    f"[dim]{i}. {step.action} {json.dumps(step.arguments, ensure_ascii=False)}[/]"
+                )
+        console.print(result.answer)
+        await llm.aclose()
+
+    asyncio.run(run())
+
+
+@app.command()
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    model: ModelOpt = None,
+    embeddings: EmbedOpt = None,
+) -> None:
+    """Run the API and web UI."""
+    import uvicorn  # noqa: PLC0415
+
+    from zelles.api.app import create_app  # noqa: PLC0415
+
+    uvicorn.run(create_app(_settings(model, embeddings)), host=host, port=port)
+
+
+@app.command()
+def mcp(model: ModelOpt = None) -> None:
+    """Run the MCP server over stdio (for Claude Desktop, IDEs and other agents)."""
+    from zelles.mcp_server import run  # noqa: PLC0415
+
+    run(_settings(model, None))
+
+
+@app.command("eval")
+def evaluate(
+    golden_dir: Annotated[Path, typer.Argument(file_okay=False)] = Path("evals/golden"),
+    model: ModelOpt = None,
+    min_f1: Annotated[float, typer.Option(help="Fail (exit 1) below this micro F1")] = 0.0,
+) -> None:
+    """Score extraction against the golden set (per-field precision, recall, F1)."""
+    from zelles.evaluation.harness import run_eval  # noqa: PLC0415
+
+    settings = _settings(model, None)
+    report = asyncio.run(run_eval(golden_dir, settings))
+    table = Table(title=f"Evaluation · {report.model}")
+    for col in ("Case", "Precision", "Recall", "F1", "Grounded", "Cost"):
+        table.add_column(col)
+    for case in report.cases:
+        cost = f"${case.cost_usd:.4f}" if case.cost_usd is not None else "n/a"
+        table.add_row(
+            case.name,
+            f"{case.precision:.2f}",
+            f"{case.recall:.2f}",
+            f"{case.f1:.2f}",
+            f"{case.grounded_rate:.0%}",
+            cost,
+        )
+    console.print(table)
+    console.print(f"micro F1 {report.f1:.3f}")
+    for miss in report.misses[:30]:
+        console.print(f"  [yellow]missed[/] {miss}")
+    if report.f1 < min_f1:
+        raise typer.Exit(1)
+
+
+@app.command()
+def version() -> None:
+    """Print the version."""
+    console.print(__version__)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    app()

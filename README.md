@@ -1,162 +1,123 @@
-# Analyse IA d’Appels d’Offres (CCTP) – Analyse-DCE
+# les_zelles
 
-Ce projet propose une application complète d’analyse intelligente des documents d’appels d’offres (CCTP), permettant :
-- L’import et l’analyse de documents PDF ou DOCX (y compris scannés avec OCR)
-- L’extraction, le résumé et la génération de questions/réponses sur le contenu
-- Une interface web interactive avec Streamlit pour l’analyse et la gestion des projets
+**Turn a French joinery tender spec (CCTP) into a cited, verified spec sheet in minutes, with a local model or none at all.**
 
----
+A joinery contractor answering a public tender (PVC, aluminium or wood windows, doors, curtain walls, shutters) receives a *DCE* with a 40 to 200 page *CCTP*. Before pricing, an estimator has to find every requirement that changes the cost or the product choice: frame material, Uw, glazing build-up, AEV class, acoustic Ra,tr, colours, security class, shutters, installation method, and the standards to comply with. Today that is a manual read, line by line, with a highlighter. Missing one line (an RC2 class on the ground floor, a 36 dB façade) means a wrong quote or a non-compliant delivery.
 
-## Structure du projet
+les_zelles does that read for you and **shows its work**: every value comes with the exact quote, the page and a highlight on the page image. Values that cannot be found in the source are flagged, never silently kept.
 
-```bash
-analyse-dce/
-|   .env
-|   docker-compose.yml
-|   README.md
-|
-+---backend/     # Backend FastAPI et logique métier
-|   |   Dockerfile      # Image docker backend
-|   |   main.py     # Point d’entrée FastAPI
-|   |   queries.json        # Cache des requêtes traitées
-|   |   requirements.txt        # Dépendances backend
-|   |
-|   +---database/
-|   |       database.py     # Gestion base de données
-|   |
-|   +---nlp/     # Modules NLP (QA, résumé, filtering)
-|   |       filtering.py
-|   |       qa.py       # Gestion des LLM pour le Q&A
-|   |       summarization.py        # Gestion des LLM pour la synthèse
-|   |       train_cross_encoder.py      # Gestion de l'entraînement du CrossEncoder
-|   |
-|   +---preprocessing/       # Nettoyage, extraction, chunking
-|   |       chunking.py
-|   |       cleaning.py
-|   |       extraction.py
-|   |       loading.py
-|   |
-|   +---utils/       # Utilitaires
-|   |       highlight.py        # Surlignage segment dans doc
-|   |
-|
-\---frontend/        # Interface utilisateur Streamlit
-        app.py      # Code frontend Streamlit
-        Dockerfile      # Image docker frontend
-        requirements.txt        # Dépendances frontend
 ```
-## Installation et lancement
-
-### 1. Prérequis
-Python 3.10+
-
-Docker et Docker Compose (optionnel mais recommandé)
-
-libreoffice pour convertir DOCX en PDF (nécessaire sur backend)
-
-```bash
-sudo apt install libreoffice tesseract-ocr
+CCTP (PDF, DOCX, scan) ──► outline-aware parse ──► rules ─┐
+                                                          ├─► verify against source ─► spec sheet + knowledge graph
+                     hybrid retrieval ──► LLM per field ──┘        (quote, page, bbox)       │
+                                                                                            ├─► web UI, JSON/CSV/XLSX
+                                                                                            ├─► product compliance check
+                                                                                            ├─► questions for the project owner
+                                                                                            └─► agent tools (HTTP, MCP, CLI)
 ```
 
-### 2. Installation manuelle
-Cloner le dépôt :
+## What it does
+
+- **Cited spec sheet.** 25 joinery fields in 10 categories, each requirement with value, unit, comparator (`≤ 1.3 W/m².K`), scope (lot, building, room type), confidence and a verified quote.
+- **Works without an LLM.** A rules engine written for CCTP wording extracts the common fields for free and deterministically. Add a model to increase recall on the long tail.
+- **Local first, cloud optional.** Ollama, llama.cpp, vLLM and LM Studio through one OpenAI-compatible adapter; Anthropic Claude through the official SDK with prompt caching; OpenAI, Mistral, Gemini and OpenRouter as presets. Cost is tracked per document (local runs cost $0).
+- **Grounding by construction.** LLM output is schema-constrained, then each quote is located in the source (exact or fuzzy match) and each number must appear in its quote. Domain validators check ranges and formats (Uw, Ug, Sw, AEV classes per EN 12207/12208/12210, RAL codes).
+- **Knowledge graph.** Document → Lot → Section → Passage → Requirement, linked to Standards, Certifications, Materials and Topics, with article cross-references ("voir article 3.2") and **conflict detection** when the same scope gets two different values. Exports to JSON and Cypher (Neo4j).
+- **Decision support.** Check a manufacturer's product against the CCTP (pass / fail / review per requirement), and draft the clarification questions to send to the architect before pricing (missing, conflicting or inconsistent values).
+- **Agent harness.** Ten typed tools (search, read passage, requirements, graph walk, conflicts, product check, clarifications...) exposed identically to the built-in agent loop, the HTTP API and an **MCP server**, so Claude Desktop, an IDE or your own agent can work on your tenders.
+- **Measured.** A golden-set evaluation harness reports per-field precision, recall, F1, grounding rate and cost, and runs in CI as a quality gate.
+
+## Quickstart
+
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/demaslesa/les_zelles.git
-cd analyse-dce
+git clone https://github.com/ademasles/les_zelles && cd les_zelles
+uv sync --extra ocr
+
+# 1. Rules only: free, offline, deterministic
+uv run zelles analyze path/to/cctp.pdf -o sheet.xlsx
+
+# 2. With a local model (https://ollama.com)
+ollama pull qwen3:8b && ollama pull bge-m3
+uv run zelles analyze path/to/cctp.pdf -m ollama:qwen3:8b -e ollama:bge-m3 --save
+
+# 3. With Claude
+uv sync --extra anthropic
+export ZELLES_LLM_API_KEY=sk-ant-...
+uv run zelles analyze path/to/cctp.pdf -m anthropic:claude-sonnet-5-5 --save
+
+# Web UI and API on http://127.0.0.1:8000
+uv run zelles serve
 ```
-- Créer et activer un environnement virtuel Python :
+
+Or with Docker:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-.\venv\Scripts\activate   # Windows
+docker compose up --build                      # rules only
+docker compose --profile local up --build      # plus an Ollama container
+docker compose exec ollama ollama pull qwen3:8b
 ```
-- Installer les dépendances backend :
+
+## Using it
+
+| Interface | Entry point |
+|---|---|
+| Web UI | `zelles serve`, then open `/`. Upload, follow progress live, browse the sheet with page highlights, ask questions, check a product, view the graph. |
+| CLI | `zelles analyze`, `ask`, `agent --trace`, `eval`, `serve`, `mcp`. Run `zelles --help`. |
+| REST API | `/api/v1`, OpenAPI docs at `/docs`. Optional `X-API-Key` header. |
+| MCP | `zelles mcp` (stdio). See [docs/agent-and-graph.md](docs/agent-and-graph.md) for the Claude Desktop config. |
+| Python | `from zelles.pipeline import analyze` |
+
+## Configuration
+
+All settings are environment variables prefixed `ZELLES_` (or a `.env` file). See [.env.example](.env.example) and [`config.py`](src/zelles/config.py).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `ZELLES_LLM_MODEL` | `none` | `provider:model`, e.g. `ollama:qwen3:8b`, `anthropic:claude-sonnet-5-5` |
+| `ZELLES_EMBEDDING_MODEL` | `none` | `none` means BM25 only; `ollama:bge-m3` adds dense retrieval |
+| `ZELLES_LLM_CONCURRENCY` | `2` | Use `1` on a single local GPU |
+| `ZELLES_DATABASE_URL` | SQLite in `data/` | Any SQLAlchemy URL; migrations run on startup |
+| `ZELLES_API_KEY` | unset | Protects the API when set |
+| `ZELLES_OCR_ENABLED` | `true` | Tesseract fallback for scanned pages |
+
+Model choice and cost per document are discussed in [docs/models.md](docs/models.md).
+
+## Project layout
+
+```
+src/zelles/
+  domain/        documents, spec fields, validators (pure, no I/O)
+  ingest/        PDF/DOCX/TXT parsing with bboxes, OCR, outline detection, chunking
+  retrieval/     French BM25, dense embeddings, RRF fusion
+  llm/           provider-agnostic clients, pricing, registry
+  extraction/    rules, LLM extractor, quote verification, merge
+  graph/         ontology of standards and the knowledge graph
+  agent/         typed tool registry and agent loop
+  api/  web/     FastAPI app and the static UI
+  storage/ jobs/ SQLAlchemy + Alembic, workspace, background jobs with SSE
+  evaluation/    golden-set harness
+evals/golden/    annotated CCTPs with expected requirements
+tests/           unit and integration tests (no network)
+docs/            architecture, models, agent and graph, evaluation
+```
+
+## Development
 
 ```bash
-pip install -r backend/requirements.txt
+make install   # uv sync + pre-commit hooks
+make check     # ruff, mypy --strict, pytest, eval gate
 ```
-- Installer les dépendances frontend :
 
-```bash
-pip install -r frontend/requirements.txt
-```
-### 3. Lancer l’application
-- Backend (FastAPI)
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architecture.md) before a larger change.
 
-```bash
-uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-- Frontend (Streamlit)
-```bash
-streamlit run frontend/app.py
-```
-### 4. Lancer avec Docker (optionnel)
-Build et lancement via docker-compose :
+## Limits
 
-bash
-Copier
-Modifier
-docker-compose up --build
-Cela démarre backend et frontend avec leurs images respectives.
+- The golden set is small and synthetic for now; scores on real tenders will be lower until more annotated CCTPs are added.
+- Tables spanning several pages and drawings are not interpreted; requirements stated only in plans or in the DPGF are out of scope.
+- Extraction targets French CCTPs. Field labels and the code are in English; prompts ask the model to quote the French source verbatim.
 
-## Fichiers importants
-```bash
-backend/main.py # API REST principale avec gestion upload, QA, feedback, etc.
+## License
 
-frontend/app.py # interface utilisateur avec menu, upload, questions, historique
-
-backend/preprocessing/ # extraction de texte, nettoyage, découpage en chunks
-
-backend/nlp/ # modules pour résumé, questions/réponses, filtrage
-
-backend/utils/highlight.py # génération PDF surligné
-
-backend/database/ # connexion base de données (SQLAlchemy)
-
-backend/queries.json # exemple de résultats
-```
-## Fonctionnalités clés
-- Import de documents PDF/DOCX (support OCR pour documents scannés)
-
-- Analyse automatique avec NLP (résumé, extraction de critères techniques)
-
-- Génération et réponses aux questions en langage naturel
-
-- Interface Streamlit pour consultation, feedback et gestion de projets
-
-- Sauvegarde des projets et questions dans base SQL locale
-
-- Surlignage dynamique des extraits dans PDF générés
-
-## Technologies utilisées
-- Backend : Python, FastAPI, Uvicorn, PyMuPDF, Tesseract, SQLAlchemy, Hugging Face Transformers, Faiss
-
-- Frontend : Streamlit, streamlit-option-menu, streamlit-tags
-
-- OCR : Tesseract OCR
-
-- Conversion DOCX ➔ PDF : LibreOffice
-
-- Modèle LLM : Mistral 7B (via Ollama ou autre)
-
-## Prérequis système
-- Tesseract OCR (https://github.com/tesseract-ocr/tesseract)
-
-- LibreOffice en ligne de commande (pour conversion DOCX en PDF)
-
-## Notes
-- Veiller à ce que les chemins de fichiers et variables d’environnement soient correctement configurés
-
-- La taille et qualité des documents peuvent impacter la rapidité et pertinence des analyses
-
-- Le modèle LLM utilisé doit être adapté à la machine (GPU recommandé)
-
-## Contact
-Anton Demasles
-✉️ demaslesa@gmail.com
-
-
-
-*N’hésite pas à contribuer, signaler des bugs ou proposer des améliorations !*
+Proprietary. The source is public for reference only; all rights reserved. See [LICENSE](LICENSE).

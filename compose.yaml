@@ -1,0 +1,30 @@
+# docker compose up                     -> rules-only, zero running cost
+# docker compose --profile local up     -> with a local Ollama model (pull it once, see README)
+services:
+  app:
+    build: .
+    image: les-zelles:latest
+    ports: ["8000:8000"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - zelles-data:/data
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["local"]
+    volumes:
+      - ollama-models:/root/.ollama
+    # Uncomment on a host with an NVIDIA GPU and the container toolkit.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+volumes:
+  zelles-data:
+  ollama-models:
