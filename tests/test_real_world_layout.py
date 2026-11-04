@@ -8,7 +8,7 @@ from zelles.extraction.rules import extract_with_rules
 from zelles.ingest.cleaning import clean_text
 from zelles.ingest.furniture import is_toc_line, strip_furniture
 from zelles.ingest.outline import detect_heading
-from zelles.ingest.parsers import _merge
+from zelles.ingest.parsers import lines_from_chars
 
 
 def test_word_hyphen_codes_and_symbol_bullets_are_kept() -> None:
@@ -16,13 +16,22 @@ def test_word_hyphen_codes_and_symbol_bullets_are_kept() -> None:
     assert clean_text(raw) == "NF EN 14351-1, vitrage 33.1-15-4, oscillo-battant, - item, -10"
 
 
-def test_small_capitals_are_glued() -> None:
-    # "O" in a larger font, then "BJET": two touching rects on one baseline.
-    segments = [(50.0, 700.0, 58.0, 712.0, "1 O"), (58.2, 700.0, 90.0, 710.0, "BJET")]
-    text, _ = _merge(segments, 842.0)
-    assert text == "1 OBJET"
-    spaced = [(50.0, 700.0, 70.0, 712.0, "Uw"), (74.0, 700.0, 90.0, 712.0, "1,3")]
-    assert _merge(spaced, 842.0)[0] == "Uw 1,3"
+def test_lines_come_from_pdfium_text_with_char_boxes() -> None:
+    # pdfium returns "NF EN 14351-1" and "Emissivité" whole in its page text,
+    # while per-rectangle extraction split them at the hyphen and the small capital.
+    text = "NF EN 14351-1\r\nTrès Basse Emissivité\r\n"
+    boxes: list[tuple[float, float, float, float] | None] = []
+    for line_index, line in enumerate(text.split("\r\n")):
+        top = 800.0 - 20 * line_index
+        boxes += [
+            None if c.isspace() else (50.0 + 5 * i, top - 10, 55.0 + 5 * i, top)
+            for i, c in enumerate(line)
+        ]
+        boxes += [None, None]
+    lines = lines_from_chars(text, boxes[: len(text)], 842.0)
+    assert [t for t, _ in lines] == ["NF EN 14351-1", "Très Basse Emissivité"]
+    first_box = lines[0][1]
+    assert first_box is not None and first_box.y0 == 42.0 and first_box.x1 == 115.0
 
 
 @pytest.mark.parametrize(
@@ -89,7 +98,9 @@ def _extract(text: str) -> dict[SpecField, set[str]]:
 
 def test_non_standard_wording_is_extracted() -> None:
     found = _extract(
-        "Etanchéité à l'air : classe A 3 / eau E 7B / vent V A3.\n"
+        "- Etanchéité à l'air : classe A 3\n- Etanchéité à l'eau : classe E 7B\n"
+        "- Etanchéité au vent : classe V A3\n"
+        "Fenêtre de toit basculante en bois. Classement Air Eau Vent : A*3 E*9 V*A3.\n"
         "Double vitrage type 4.16.4 clair, Très Basse Emissivité (intercalaires noirs).\n"
         "Vitrage feuilleté 33.1-15-4 en allège.\n"
         "Profilés PVC de 70 mm, cinq chambres, renforts acier.\n"
@@ -97,9 +108,12 @@ def test_non_standard_wording_is_extracted() -> None:
         "Entrée d'air en traverse haute, module Aldès autoréglable.\n"
         "Persiennes PVC à refoulement latéral.\n"
         "Menuiseries PVC blanc teinté dans la masse.\n"
+        "- Coloris blanc\n- Verrouillage automatique\n"
+        "Store intérieur occultant, manoeuvre par manivelle. Posées en applique.\n"
         "Isolement acoustique : classement de façade 30 dB(A).\n"
     )
-    assert "A*3 E*7B V*A3" in found[SpecField.AEV]
+    assert {"A*3 E*7B V*A3", "A*3 E*9 V*A3"} <= found[SpecField.AEV]
+    assert any("basculant" in v.lower() for v in found[SpecField.OPENING_TYPE])
     assert {"4.16.4", "33.1-15-4"} <= found[SpecField.GLAZING_COMPOSITION]
     assert any("missivit" in v for v in found[SpecField.GLAZING_TYPE])
     assert any("intercalaires noirs" in v for v in found[SpecField.SPACER])
@@ -107,7 +121,11 @@ def test_non_standard_wording_is_extracted() -> None:
     assert any("Winkhaus" in v for v in found[SpecField.HARDWARE])
     assert any("autoréglable" in v for v in found[SpecField.AIR_INLETS])
     assert any("Persiennes" in v for v in found[SpecField.SHUTTERS])
-    assert any("teinté dans la masse" in v for v in found[SpecField.COLOR])
+    assert any("blanc" in v.lower() for v in found[SpecField.COLOR])
+    assert not any("Verrouillage" in v for v in found[SpecField.COLOR])
+    assert any("teinté dans la masse" in v for v in found[SpecField.FINISH])
+    assert any("Store intérieur" in v for v in found[SpecField.SHUTTERS])
+    assert any("applique" in v for v in found[SpecField.INSTALLATION])
     assert "30 dB" in found[SpecField.ACOUSTIC]
 
 
@@ -117,3 +135,30 @@ def test_standard_titles_are_not_requirements() -> None:
     )
     assert SpecField.ACCESSIBILITY not in found
     assert "NF EN 13115" in found[SpecField.STANDARDS]
+
+
+def test_one_descriptive_value_per_sentence() -> None:
+    found = _extract("Persiennes PVC à refoulement latéral, lames persienne fixées par 4 vis.")
+    assert len(found[SpecField.SHUTTERS]) == 1
+
+
+def test_existing_building_sections_are_skipped() -> None:
+    existing = Chunk(
+        id="c0001",
+        index=1,
+        text="Les logements sont équipés de persiennes et d'une VMC autoréglable.",
+        section_path=["3 Description des installations existantes"],
+    )
+    works = Chunk(
+        id="c0002",
+        index=2,
+        text="Dépose totale des persiennes existantes.",
+        section_path=["4 Dépose des ouvrages existants"],
+    )
+    reqs = extract_with_rules([existing, works])
+    assert {r.citation.chunk_id for r in reqs if r.citation} == {"c0002"}
+
+
+def test_quantities_are_not_headings() -> None:
+    assert detect_heading("3 PC 16 A avec terre, fermées par clapet étanche") is None
+    assert detect_heading("5.2 Fenêtres de toit") is not None
