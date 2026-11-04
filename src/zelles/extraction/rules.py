@@ -103,6 +103,7 @@ RULES: list[Rule] = [
         re.compile(r"(?<![\w,.])(\d{2})\s*dB(?:\s*\(?A\)?)?"),
         0.7,
         requires=re.compile(r"Ra\s*,\s*tr|acoustique|affaiblissement|DnT", _I),
+        excludes=re.compile(r"entrées?\s+d'air|grilles?|mortaises?|Dn\s*,\s*e", _I),
         normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(
