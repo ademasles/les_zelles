@@ -59,13 +59,14 @@ def matches(pred: Requirement, exp: Expected) -> bool:
         return pred.numeric_value is not None and abs(pred.numeric_value - exp.numeric) < 1e-6
     if exp.value is None:
         return False
-    want = " ".join(fold(exp.value).replace("*", " * ").split())
-    have = " ".join(
-        fold(pred.value + " " + (pred.citation.quote if pred.citation else ""))
-        .replace("*", " * ")
-        .split()
-    )
+    want = _comparable(exp.value)
+    have = _comparable(pred.value + " " + (pred.citation.quote if pred.citation else ""))
     return want in have
+
+
+def _comparable(text: str) -> str:
+    """Fold accents and case; hyphens and stars as spaces ("warm-edge" = "warm edge")."""
+    return " ".join(fold(text).replace("*", " * ").replace("-", " ").split())
 
 
 def score(
