@@ -27,7 +27,7 @@ from zelles.domain.validators import validate
 F = SpecField
 _I = re.IGNORECASE
 
-_SENTENCE_END = re.compile(r"(?<=[.;!?])\s+(?=[A-ZÀ-Ÿ0-9])|\n")
+_SENTENCE_END = re.compile(r"(?<=[.;!?])(?<!\b[A-Z]\.)\s+(?=[A-ZÀ-Ÿ0-9])|\n")
 
 
 @dataclass(frozen=True)
@@ -171,6 +171,12 @@ RULES: list[Rule] = [
         excludes=re.compile(r"volet|lame|poignée|renfort|coffre|grille", _I),
         normalize=_material,
     ),
+    Rule(  # "Bois massif", "bois lamellé-collé": wood named by its kind, even near "lame"
+        F.FRAME_MATERIAL,
+        re.compile(r"\bbois\s+(?:massif|exotique|résineux|lamellé[- ]collé|aboutés?)\b", _I),
+        0.6,
+        normalize=lambda m: "Wood",
+    ),
     Rule(
         F.OPENING_TYPE,
         re.compile(
@@ -178,6 +184,10 @@ RULES: list[Rule] = [
             _I,
         ),
         0.7,
+        # a standard's title or the removal of the old windows is not the new opening type
+        excludes=re.compile(
+            r"\b(?:NF\s+)?(?:DTU|EN)\s?\d|\bdépose|\banciens?\b|\banciennes?\b", _I
+        ),
     ),
     Rule(
         F.PROFILE_SYSTEM,
@@ -220,6 +230,7 @@ RULES: list[Rule] = [
             _I,
         ),
         0.65,
+        excludes=re.compile(r"\b(?:Sw|Uw|Ug|TLw)\b", _I),  # a performance line, not a shutter spec
     ),
     Rule(F.AIR_INLETS, re.compile(r"\bentrées?\s+d'air[^.;\n]{0,110}", _I), 0.7),
     Rule(
@@ -245,7 +256,7 @@ RULES: list[Rule] = [
     Rule(
         F.INSTALLATION,
         re.compile(
-            r"\bpos(?:e|ée?s?)\s+en\s+(?:applique|tunnel|feuillure|rénovation)[^.;,\n]{0,40}|\bdépose\s+(?:des?\s+)?(?:menuiseries|châssis|fenêtres|ouvrages)\s+existant(?:e?s)?\b|\bdépose\s+totale\b|\bsur\s+dormant\s+existant\b|\bcalfeutrement[^.;\n]{0,70}",
+            r"\bpos(?:e|ée?s?)\s+en\s+(?:applique|tunnel|feuillure|rénovation)[^.;,\n]{0,40}|\bdépose\s+(?:des?\s+)?(?:menuiseries|châssis|fenêtres|ouvrages)\s+existant(?:e?s)?\b|\bdépose\s+(?:du\s+ou\s+des|des?|du)\s+(?:vantaux|ouvrants?|dormants?)\b|\b(?:menuiseries?|fenêtres?|châssis)\s+(?:PVC\s+|aluminium\s+|bois\s+)?de\s+rénovation\b|\bdépose\s+totale\b|\bsur\s+dormant\s+existant\b|\bcalfeutrement[^.;\n]{0,70}",
             _I,
         ),
         0.75,
@@ -253,7 +264,7 @@ RULES: list[Rule] = [
     Rule(
         F.STANDARDS,
         re.compile(
-            r"\bNF\s+(?:DTU|EN(?:\s+ISO)?|P)\s?\d+(?:[.\-]\d+)*\b|\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b",
+            r"\bNF\s+(?:DTU|EN(?:\s+ISO)?|P)\s?\d+(?:[.\-]\d+)*\b|\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
             _I,
         ),
         0.9,
@@ -269,7 +280,7 @@ RULES: list[Rule] = [
     Rule(
         F.REGULATION,
         re.compile(
-            r"\b(?:RE\s?2020|RT\s?2012|RT\s+existant|réglementation\s+(?:incendie|parasismique|thermique)|\bERP\b)",
+            r"\barrêté\s+du\s+\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4}\b|\b(?:RE\s?2020|RT\s?2012|RT\s+existant|réglementation\s+(?:incendie|parasismique|thermique)|\bERP\b)",
             _I,
         ),
         0.85,
@@ -281,8 +292,9 @@ RULES: list[Rule] = [
 _EXISTING = re.compile(r"\bexistant(?:e?s)?\b|\bétat\s+des\s+lieux\b|\bconstat\b", _I)
 _WORKS = re.compile(r"\bdépose|démolition|remplacement|travaux|reprise|adaptation|neuf", _I)
 
-# Descriptive fields: one value per sentence is enough ("persienne", "persienne)", ...).
-_ONE_PER_SENTENCE = frozenset(
+# Descriptive fields: one value per article and trigger word is enough
+# ("persienne", "persienne)", "Persienne offrant..." are the same requirement).
+_ONE_PER_ARTICLE = frozenset(
     {
         F.SHUTTERS,
         F.HARDWARE,
@@ -321,7 +333,7 @@ def _sentence_around(text: str, pos: int) -> str:
 def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     """Run every rule over every chunk and return cited requirements."""
     found: dict[tuple[str, str, str], Requirement] = {}
-    per_sentence: dict[tuple[SpecField, str], tuple[str, str, str]] = {}
+    per_slot: dict[tuple[SpecField, str], tuple[str, str, str]] = {}
     for chunk in chunks:
         if describes_existing(chunk):
             continue
@@ -352,7 +364,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     citation=Citation(
                         chunk_id=chunk.id,
                         quote=sentence,
-                        page=chunk.page_start,
+                        page=chunk.page_at(match.start()),
                         locator=chunk.locator(),
                         match_score=1.0,
                     ),
@@ -361,15 +373,16 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     confidence=rule.confidence,
                 )
                 key = req.dedupe_key()
-                if rule.field in _ONE_PER_SENTENCE:
-                    slot = (rule.field, f"{chunk.id}:{sentence}")
-                    previous = per_sentence.get(slot)
+                if rule.field in _ONE_PER_ARTICLE:
+                    trigger = re.sub(r"\W", "", value.split()[0].lower()).rstrip("s")
+                    slot = (rule.field, f"{chunk.id}:{trigger}")
+                    previous = per_slot.get(slot)
                     if previous is not None and previous in found:
                         # Keep the most informative value for this sentence.
                         if len(req.value) <= len(found[previous].value):
                             continue
                         del found[previous]
                     if key not in found:
-                        per_sentence[slot] = key
+                        per_slot[slot] = key
                 found.setdefault(key, req)
     return list(found.values())

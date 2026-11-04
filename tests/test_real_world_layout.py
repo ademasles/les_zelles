@@ -162,3 +162,49 @@ def test_existing_building_sections_are_skipped() -> None:
 def test_quantities_are_not_headings() -> None:
     assert detect_heading("3 PC 16 A avec terre, fermées par clapet étanche") is None
     assert detect_heading("5.2 Fenêtres de toit") is not None
+
+
+def test_citation_page_follows_the_match_across_a_page_break() -> None:
+    chunk = Chunk(
+        id="c0003",
+        index=3,
+        text="Fenêtre de toit en bois.\nClassement Air Eau Vent : A*3 E*9 V*A3.",
+        page_start=17,
+        page_end=18,
+        page_offsets=[(0, 17), (25, 18)],
+        section_path=["Lot unique", "5 DESCRIPTION DES TRAVAUX", "5.2 Fenêtres de toit"],
+        lot="Lot unique",
+    )
+    (aev,) = [r for r in extract_with_rules([chunk]) if r.field == SpecField.AEV]
+    assert aev.citation is not None and aev.citation.page == 18
+    assert aev.scope == "5.2 Fenêtres de toit"
+
+
+def test_generic_headings_do_not_set_the_scope() -> None:
+    chunk = Chunk(
+        id="c0",
+        index=0,
+        text="x",
+        section_path=["Lot 1", "6.3 OCCULTATION", "FABRICATION"],
+        lot="Lot 1",
+    )
+    assert chunk.scope == "6.3 OCCULTATION"
+
+
+def test_abbreviations_do_not_end_the_quote() -> None:
+    found = _extract("Les ouvrages respecteront le D.T.U. N° 36.1/39.1 en vigueur.")
+    assert any("36.1" in v for v in found[SpecField.STANDARDS])
+
+
+def test_xlsx_export_drops_illegal_characters() -> None:
+    from zelles.domain.spec import Citation, Requirement, RequirementSource, SpecSheet
+    from zelles.exports import to_xlsx
+
+    req = Requirement(
+        field=SpecField.HARDWARE,
+        value="targettes-arrêts",
+        citation=Citation(chunk_id="c0", quote="grâce aux targettes￾arrêts", page=15),
+        source=RequirementSource.RULES,
+    )
+    sheet = SpecSheet(document_id="0" * 16, filename="x.pdf", model="rules", requirements=[req])
+    assert to_xlsx(sheet)[:2] == b"PK"
