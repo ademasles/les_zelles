@@ -1,5 +1,5 @@
 from zelles.config import Settings
-from zelles.domain.spec import RequirementSource, RequirementStatus, SpecField
+from zelles.domain.spec import RequirementStatus, SpecField
 from zelles.llm.fake import FakeLLM, HashEmbedder
 from zelles.pipeline import analyze
 
@@ -25,7 +25,10 @@ async def test_llm_adds_values_and_hallucinations_are_flagged(
     )
     reqs = analysis.sheet.requirements
     acoustic = {r.numeric_value: r for r in reqs if r.field == SpecField.ACOUSTIC}
-    assert acoustic[28.0].source == RequirementSource.LLM
+    assert set(acoustic) == {30.0, 28.0}
+    # Found by the rules too: the LLM confirms it and contributes the precise scope.
+    assert acoustic[28.0].scope == "autres façades"
+    assert "confirmed by rules and LLM" in acoustic[28.0].notes
     assert acoustic[28.0].status == RequirementStatus.VERIFIED
     rc3 = next(r for r in reqs if r.field == SpecField.SECURITY_CLASS and r.value == "RC3")
     assert rc3.status == RequirementStatus.UNVERIFIED

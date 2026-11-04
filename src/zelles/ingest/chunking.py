@@ -35,6 +35,12 @@ def chunk_document(doc: ParsedDocument, *, max_chars: int = 2400) -> list[Chunk]
             current = []
             return
         pages = [b.page for _, b in current if b.page is not None]
+        offsets: list[tuple[int, int]] = []
+        position = 0
+        for _, b in current:
+            if b.page is not None and (not offsets or offsets[-1][1] != b.page):
+                offsets.append((position, b.page))
+            position += len(b.text) + 1
         chunks.append(
             Chunk(
                 id=f"c{len(chunks):04d}",
@@ -47,6 +53,7 @@ def chunk_document(doc: ParsedDocument, *, max_chars: int = 2400) -> list[Chunk]
                 article=article(),
                 has_table=any(b.kind == BlockKind.TABLE for _, b in current),
                 block_ids=[i for i, _ in current],
+                page_offsets=offsets,
             )
         )
         current = []

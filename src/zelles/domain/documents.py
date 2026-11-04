@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -72,6 +73,17 @@ class ParsedDocument(BaseModel):
         return any(b.page is not None for b in self.blocks)
 
 
+_LOT_LABEL = re.compile(r"^\s*lot\b", re.IGNORECASE)
+_GENERIC_HEADING = re.compile(
+    r"^\s*(?:[\d.]+\s*)?(?:g[ée]n[ée]ralit[ée]s|objet|description|travaux|sp[ée]cifications?|"
+    r"prescriptions?|performances?|caract[ée]ristiques?|mat[ée]riaux|fabrication|mise\s+en\s+(?:œ|oe)uvre|"
+    r"documents?|normes?|r[ée]glementation|r[ée]f[ée]rences?|essais|contr[ôo]les?|garanties?|"
+    r"nettoyage|r[ée]ception|pr[ée]sentation|composition|qualit[ée]|conditions?|"
+    r"miroiterie|vitrages?|quincaillerie|ferrages?|finitions?|teintes?|coloris|accessoires)\b",
+    re.IGNORECASE,
+)
+
+
 class Chunk(BaseModel):
     """A retrieval unit that follows the CCTP outline (lot, article, sub-article)."""
 
@@ -87,6 +99,19 @@ class Chunk(BaseModel):
     block_ids: list[int] = Field(
         default_factory=list, description="Indices into ParsedDocument.blocks."
     )
+    page_offsets: list[tuple[int, int]] = Field(
+        default_factory=list,
+        description="(character offset, page) where each page starts in the chunk text.",
+    )
+
+    def page_at(self, offset: int) -> int | None:
+        """Page of the character at ``offset`` (chunks can straddle a page break)."""
+        page = self.page_start
+        for start, number in self.page_offsets:
+            if start > offset:
+                break
+            page = number
+        return page
 
     @property
     def heading(self) -> str:
@@ -94,11 +119,21 @@ class Chunk(BaseModel):
 
     @property
     def scope(self) -> str | None:
-        """Top-level article this chunk belongs to (what its requirements apply to)."""
-        for label in self.section_path:
-            if label != self.lot:
-                return label
-        return None
+        """What this chunk's requirements apply to.
+
+        The deepest heading that names a part of the works ("5.2 Fenêtres de
+        toit", "2 Menuiseries PVC - Logements"), skipping generic headings such
+        as "2.3 Performances" or "Fabrication" that only organise the text.
+        """
+        labels = [
+            label
+            for label in self.section_path
+            if label != self.lot and not _LOT_LABEL.match(label)
+        ]
+        specific = [label for label in labels if not _GENERIC_HEADING.search(label)]
+        if specific:
+            return specific[-1]
+        return labels[0] if labels else None
 
     def locator(self) -> str:
         """Human-readable location, e.g. 'Lot 05 · 3.2.1 Menuiseries PVC · p. 14'."""

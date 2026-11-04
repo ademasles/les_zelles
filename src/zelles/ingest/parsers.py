@@ -24,6 +24,7 @@ from typing import Protocol
 
 from zelles.domain.documents import BBox, Block, BlockKind, Page, ParsedDocument
 from zelles.ingest.cleaning import clean_text
+from zelles.ingest.furniture import strip_furniture
 from zelles.ingest.outline import detect_heading
 
 log = logging.getLogger(__name__)
@@ -140,6 +141,7 @@ class PdfiumParser:
 
         doc = ParsedDocument(filename=filename, media_type=PDF, parser=self.name)
         pdf = pdfium.PdfDocument(data)
+        raw: list[tuple[list[tuple[str, BBox | None]], float | None]] = []
         try:
             for index in range(len(pdf)):
                 page = pdf[index]
@@ -155,43 +157,29 @@ class PdfiumParser:
                         doc.warnings.append(
                             f"page {number} has no text layer and OCR is unavailable"
                         )
-                blocks = _blocks_from_lines(lines, number)
-                doc.blocks.extend(blocks)
-                doc.pages.append(
-                    Page(
-                        number=number,
-                        width=width,
-                        height=height,
-                        text="\n".join(b.text for b in blocks),
-                        ocr=ocr_used,
-                    )
-                )
+                raw.append((lines, height))
+                doc.pages.append(Page(number=number, width=width, height=height, ocr=ocr_used))
         finally:
             pdf.close()
+        for page_info, lines in zip(doc.pages, strip_furniture(raw), strict=True):
+            blocks = _blocks_from_lines(lines, page_info.number)
+            doc.blocks.extend(blocks)
+            page_info.text = "\n".join(b.text for b in blocks)
         return doc
 
     @staticmethod
     def _lines(page: object, page_height: float) -> list[tuple[str, BBox | None]]:
         textpage = page.get_textpage()  # type: ignore[attr-defined]
         try:
-            segments: list[tuple[float, float, float, float, str]] = []
-            for i in range(textpage.count_rects()):
-                left, bottom, right, top = textpage.get_rect(i)
-                text = textpage.get_text_bounded(left, bottom, right, top).strip()
-                if text:
-                    segments.append((left, bottom, right, top, text))
-            # Merge segments that sit on the same baseline into one line.
-            segments.sort(key=lambda s: (-round(s[3], 0), s[0]))
-            lines: list[tuple[str, BBox | None]] = []
-            current: list[tuple[float, float, float, float, str]] = []
-            for seg in segments:
-                if current and abs(current[-1][3] - seg[3]) > 2.0:
-                    lines.append(_merge(current, page_height))
-                    current = []
-                current.append(seg)
-            if current:
-                lines.append(_merge(current, page_height))
-            return lines
+            count = textpage.count_chars()
+            text = textpage.get_text_range(0, count)
+            if len(text) != count:  # rare (non-UCS-2 text): fall back to one call per char
+                text = "".join((textpage.get_text_range(i, 1) or " ")[:1] for i in range(count))
+            boxes = [
+                None if text[i].isspace() else textpage.get_charbox(i, loose=True)
+                for i in range(count)
+            ]
+            return lines_from_chars(text, boxes, page_height)
         finally:
             textpage.close()
 
@@ -221,18 +209,38 @@ class PdfiumParser:
         return lines
 
 
-def _merge(
-    segments: list[tuple[float, float, float, float, str]], page_height: float
-) -> tuple[str, BBox]:
-    segments.sort(key=lambda s: s[0])
-    text = " ".join(s[4] for s in segments)
-    box = BBox(
-        x0=min(s[0] for s in segments),
-        y0=page_height - max(s[3] for s in segments),
-        x1=max(s[2] for s in segments),
-        y1=page_height - min(s[1] for s in segments),
-    )
-    return text, box
+def lines_from_chars(
+    text: str,
+    boxes: list[tuple[float, float, float, float] | None],
+    page_height: float,
+) -> list[tuple[str, BBox | None]]:
+    """Split pdfium's page text into lines, each with the union box of its characters.
+
+    pdfium's own text assembly keeps hyphens and small capitals intact
+    ("NF EN 14351-1", "Emissivité"), which per-rectangle extraction does not:
+    it returns the hyphen and a small-capital initial as separate rectangles.
+    Boxes are (left, bottom, right, top) in PDF units; BBox uses a top-left origin.
+    """
+    lines: list[tuple[str, BBox | None]] = []
+    start = 0
+    for end in [*(i for i, c in enumerate(text) if c == "\n"), len(text)]:
+        line = text[start:end].replace("\r", "").strip()
+        chars = [b for b in boxes[start:end] if b is not None and b[2] > b[0]]
+        start = end + 1
+        if not line:
+            continue
+        box = (
+            BBox(
+                x0=min(b[0] for b in chars),
+                y0=page_height - max(b[3] for b in chars),
+                x1=max(b[2] for b in chars),
+                y1=page_height - min(b[1] for b in chars),
+            )
+            if chars
+            else None
+        )
+        lines.append((line, box))
+    return lines
 
 
 # --------------------------------------------------------------------------- DOCX

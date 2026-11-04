@@ -22,7 +22,7 @@ _COMPARATORS = (
 
 # NF EN 12207 (air), NF EN 12208 (water), NF EN 12210 (wind)
 AEV_AIR = re.compile(r"A\s*\*?\s*([1-4])\b", re.IGNORECASE)
-AEV_WATER = re.compile(r"E\s*\*?\s*([1-9][AB]|E\s*\d{3,4})\b", re.IGNORECASE)
+AEV_WATER = re.compile(r"E\s*\*?\s*([1-9]\s?[AB]?|E\s*\d{3,4})\b", re.IGNORECASE)
 AEV_WIND = re.compile(r"V\s*\*?\s*([ABC]\s*[1-5]|E\s*\d{3,4})\b", re.IGNORECASE)
 
 # Plausible ranges, wide on purpose: they flag unit or OCR errors, not design choices.
