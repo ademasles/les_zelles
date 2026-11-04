@@ -15,6 +15,8 @@ _LOT = re.compile(
     re.IGNORECASE,
 )
 _LEADERS = re.compile(r"\.{3,}|…")
+# A quantity inside the title ("3 PC 16 A avec terre") means a list item, not a heading.
+_QUANTITY = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:A|V|W|mm|cm|m|m2|m²|kg|dB|Pa|%)(?![\w*])")
 _NUMBERED = re.compile(
     r"^\s*(?:article|art\.?|chapitre|section)?\s*"
     r"(\d{1,2}(?:\.\d{1,3}){0,5})\.?\s*[-:)]?\s+"
@@ -72,7 +74,12 @@ def detect_heading(line: str, *, style_level: int | None = None) -> Heading | No
         first = int(number.split(".")[0])
         sentence_like = title.endswith((".", ";", ",")) and len(title) > 80
         # Real titles start with a capital: "5 étapes de traitement..." is a sentence.
-        if first <= 40 and not sentence_like and not title[0].islower():
+        if (
+            first <= 40
+            and not sentence_like
+            and not title[0].islower()
+            and not _QUANTITY.search(title)
+        ):
             return Heading(level=number.count(".") + 1, number=number, title=title.rstrip(" :."))
 
     if m := _LETTERED.match(text):

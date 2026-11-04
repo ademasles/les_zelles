@@ -14,7 +14,6 @@ Docling can be enabled for complex layouts (``ZELLES_PARSER=docling``).
 from __future__ import annotations
 
 import io
-import itertools
 import logging
 import shutil
 import subprocess
@@ -172,24 +171,15 @@ class PdfiumParser:
     def _lines(page: object, page_height: float) -> list[tuple[str, BBox | None]]:
         textpage = page.get_textpage()  # type: ignore[attr-defined]
         try:
-            segments: list[tuple[float, float, float, float, str]] = []
-            for i in range(textpage.count_rects()):
-                left, bottom, right, top = textpage.get_rect(i)
-                text = textpage.get_text_bounded(left, bottom, right, top).strip()
-                if text:
-                    segments.append((left, bottom, right, top, text))
-            # Merge segments that sit on the same baseline into one line.
-            segments.sort(key=lambda s: (-round(s[3], 0), s[0]))
-            lines: list[tuple[str, BBox | None]] = []
-            current: list[tuple[float, float, float, float, str]] = []
-            for seg in segments:
-                if current and abs(current[-1][3] - seg[3]) > 2.0:
-                    lines.append(_merge(current, page_height))
-                    current = []
-                current.append(seg)
-            if current:
-                lines.append(_merge(current, page_height))
-            return lines
+            count = textpage.count_chars()
+            text = textpage.get_text_range(0, count)
+            if len(text) != count:  # rare (non-UCS-2 text): fall back to one call per char
+                text = "".join((textpage.get_text_range(i, 1) or " ")[:1] for i in range(count))
+            boxes = [
+                None if text[i].isspace() else textpage.get_charbox(i, loose=True)
+                for i in range(count)
+            ]
+            return lines_from_chars(text, boxes, page_height)
         finally:
             textpage.close()
 
@@ -219,24 +209,38 @@ class PdfiumParser:
         return lines
 
 
-def _merge(
-    segments: list[tuple[float, float, float, float, str]], page_height: float
-) -> tuple[str, BBox]:
-    segments.sort(key=lambda s: s[0])
-    # pdfium splits a word into several rects when the font size changes inside
-    # it (small capitals: "O" + "BJET"). Glue rects that touch; space the others.
-    height = max(s[3] - s[1] for s in segments) or 1.0
-    text = segments[0][4]
-    for prev, seg in itertools.pairwise(segments):
-        glued = seg[0] - prev[2] < 0.1 * height and prev[4][-1:].isalnum() and seg[4][:1].isalnum()
-        text += seg[4] if glued else " " + seg[4]
-    box = BBox(
-        x0=min(s[0] for s in segments),
-        y0=page_height - max(s[3] for s in segments),
-        x1=max(s[2] for s in segments),
-        y1=page_height - min(s[1] for s in segments),
-    )
-    return text, box
+def lines_from_chars(
+    text: str,
+    boxes: list[tuple[float, float, float, float] | None],
+    page_height: float,
+) -> list[tuple[str, BBox | None]]:
+    """Split pdfium's page text into lines, each with the union box of its characters.
+
+    pdfium's own text assembly keeps hyphens and small capitals intact
+    ("NF EN 14351-1", "Emissivité"), which per-rectangle extraction does not:
+    it returns the hyphen and a small-capital initial as separate rectangles.
+    Boxes are (left, bottom, right, top) in PDF units; BBox uses a top-left origin.
+    """
+    lines: list[tuple[str, BBox | None]] = []
+    start = 0
+    for end in [*(i for i, c in enumerate(text) if c == "\n"), len(text)]:
+        line = text[start:end].replace("\r", "").strip()
+        chars = [b for b in boxes[start:end] if b is not None and b[2] > b[0]]
+        start = end + 1
+        if not line:
+            continue
+        box = (
+            BBox(
+                x0=min(b[0] for b in chars),
+                y0=page_height - max(b[3] for b in chars),
+                x1=max(b[2] for b in chars),
+                y1=page_height - min(b[1] for b in chars),
+            )
+            if chars
+            else None
+        )
+        lines.append((line, box))
+    return lines
 
 
 # --------------------------------------------------------------------------- DOCX
