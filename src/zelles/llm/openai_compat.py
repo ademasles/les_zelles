@@ -38,6 +38,8 @@ PRESETS: dict[str, tuple[str, str | None]] = {
     "openai-compatible": ("http://localhost:8000/v1", None),
 }
 
+LOCAL_PROVIDERS = frozenset({"ollama", "llamacpp", "vllm", "lmstudio", "openai-compatible"})
+
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
@@ -82,6 +84,7 @@ class OpenAICompatibleLLM:
         key = api_key or (os.environ.get(env_key) if env_key else None)
         headers = {"Authorization": f"Bearer {key}"} if key else {}
         self._client = client or httpx.AsyncClient(timeout=timeout_s, headers=headers)
+        self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.max_output_tokens = max_output_tokens
         self.price = price_for(provider, model, override=price)
@@ -96,6 +99,12 @@ class OpenAICompatibleLLM:
         for attempt in range(self.max_retries + 1):
             try:
                 response = await self._client.post(url, json=payload)
+            except (httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+                # The server is up but too slow; resending the same prompt only repeats the wait.
+                raise LLMError(
+                    f"{self.name}: no reply within {self.timeout_s:.0f} s from {url}; "
+                    "raise ZELLES_LLM_TIMEOUT_S or use a faster model"
+                ) from exc
             except httpx.TransportError as exc:
                 if attempt == self.max_retries:
                     raise LLMError(f"{self.name}: cannot reach {url}: {exc}") from exc

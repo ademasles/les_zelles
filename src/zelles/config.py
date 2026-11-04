@@ -44,7 +44,11 @@ class Settings(BaseSettings):
         default=None, description="Override the provider's base URL (OpenAI-compatible servers)."
     )
     llm_api_key: SecretStr | None = Field(default=None, description="API key for cloud providers.")
-    llm_timeout_s: float = 180.0
+    llm_timeout_s: float | None = Field(
+        default=None,
+        description="Seconds to wait for one LLM reply. Defaults to 600 for local servers, "
+        "180 for cloud APIs.",
+    )
     llm_max_retries: int = 2
     llm_concurrency: int = Field(
         default=2, description="Parallel LLM calls. Use 1 for a single local GPU."

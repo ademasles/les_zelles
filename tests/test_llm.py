@@ -85,3 +85,22 @@ async def test_retries_then_fails() -> None:
     llm = OpenAICompatibleLLM("openai", "m", base_url="http://llm.test/v1", max_retries=1)
     with pytest.raises(LLMError, match="503"):
         await llm.complete(system="s", messages=[Message("user", "u")])
+
+
+def test_local_servers_get_a_longer_timeout() -> None:
+    settings = Settings(llm_model="none")
+    local = create_llm("ollama:granite4.2:8b", settings)
+    cloud = create_llm("openai:m", settings)
+    assert isinstance(local, OpenAICompatibleLLM) and local.timeout_s == 600
+    assert isinstance(cloud, OpenAICompatibleLLM) and cloud.timeout_s == 180
+    pinned = create_llm("ollama:m", Settings(llm_model="none", llm_timeout_s=30))
+    assert isinstance(pinned, OpenAICompatibleLLM) and pinned.timeout_s == 30
+
+
+@respx.mock
+async def test_read_timeout_is_reported_and_not_retried() -> None:
+    route = respx.post(URL).mock(side_effect=httpx.ReadTimeout("slow"))
+    llm = OpenAICompatibleLLM("ollama", "m", base_url="http://llm.test/v1", timeout_s=5)
+    with pytest.raises(LLMError, match="no reply within 5 s"):
+        await llm.complete(system="s", messages=[Message("user", "u")])
+    assert route.call_count == 1
