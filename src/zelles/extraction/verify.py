@@ -74,7 +74,8 @@ def verify_requirement(req: Requirement, chunks: dict[str, Chunk]) -> Requiremen
                 break
     if chunk is not None:
         citation.chunk_id = chunk.id
-        citation.page = chunk.page_start
+        position = chunk.text.find(citation.quote)
+        citation.page = chunk.page_at(position) if position >= 0 else chunk.page_start
         citation.locator = chunk.locator()
         if req.scope is None:
             req.scope = chunk.scope
