@@ -73,12 +73,37 @@ RULES: list[Rule] = [
         ),
         0.95,
     ),
+    Rule(  # "classe A 3 / eau E 7B / vent V A3", "A3 - E7B - VA2"
+        F.AEV,
+        re.compile(
+            r"\bA\s*\*?\s*[1-4]\b[^\n]{0,25}?\bE\s*\*?\s*(?:[1-9]\s?[AB]|E\s*\d{3,4})\b[^\n]{0,25}?\bV\s*\*?\s*(?:[ABC]\s?[1-5]|E\s*\d{3,4})\b",
+            _I,
+        ),
+        0.85,
+        requires=re.compile(r"\bair\b|AEV|étanchéité|perméabilité|classement", _I),
+    ),
     Rule(
         F.ACOUSTIC,
         re.compile(
             rf"\b(?:Ra\s*,\s*tr|R\s*A\s*,\s*tr|Rw\s*\(\s*C\s*;\s*Ctr\s*\)|Rw)\b{CMP}{NUM}\s*dB", _I
         ),
         0.85,
+    ),
+    Rule(
+        F.ACOUSTIC,
+        re.compile(
+            rf"\b(?:DnT\s*,\s*A\s*,\s*tr|isolement\s+acoustique|affaiblissement\s+acoustique|classement\s+de\s+façade)\b[^.;\n]{{0,40}}?{NUM}\s*dB(?:\s*\(?A\)?)?",
+            _I,
+        ),
+        0.75,
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # further values in the same sentence: "..., 28 dB pour les autres façades"
+        F.ACOUSTIC,
+        re.compile(r"(?<![\w,.])(\d{2})\s*dB(?:\s*\(?A\)?)?"),
+        0.7,
+        requires=re.compile(r"Ra\s*,\s*tr|acoustique|affaiblissement|DnT", _I),
+        normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(
         F.COLOR,
@@ -89,15 +114,31 @@ RULES: list[Rule] = [
         0.85,
     ),
     Rule(
+        F.COLOR,
+        re.compile(
+            r"\b(?:teinte|coloris|couleur|finition)\s*:?\s*(?:blanc(?:he)?|gris(?:\s+anthracite)?|noir|beige|ivoire|sable|chêne\s+doré|ton\s+bois)\b[^.;,\n]{0,25}|\bblanc\s+teinté\s+dans\s+la\s+masse\b",
+            _I,
+        ),
+        0.7,
+    ),
+    Rule(
         F.GLAZING_COMPOSITION,
-        re.compile(r"(?<![\w/])\d{1,2}(?:[.,]\d)?(?:\s*/\s*\d{1,2}(?:[.,]\d)?){2,4}(?![\w/])"),
+        re.compile(
+            r"(?<![\w/.-])\d{1,2}(?:[.,]\d)?(?:\s*[/-]\s*\d{1,2}(?:[.,]\d)?){2,4}(?![\w/-])"
+        ),
         0.8,
+        requires=re.compile(r"vitrage|verre|glace", _I),
+    ),
+    Rule(  # "4.16.4": dotted notation, the middle number being the gap in mm
+        F.GLAZING_COMPOSITION,
+        re.compile(r"(?<![\w.])\d{1,2}\.(?:[6-9]|1\d|2[0-4])\.\d{1,2}(?![\w.])"),
+        0.7,
         requires=re.compile(r"vitrage|verre|glace", _I),
     ),
     Rule(
         F.GLAZING_TYPE,
         re.compile(
-            r"\b(?:double|triple)\s+vitrage(?:\s+isolant)?(?:[^.;\n]{0,70}?(?:argon|krypton|émissif|ITR|contrôle solaire))?",
+            r"\b(?:double|triple)\s+vitrage(?:\s+isolant)?(?:[^.;\n]{0,70}?(?:argon|krypton|émissif|ITR|contrôle solaire))?|\b(?:très\s+)?(?:basse|faible)\s+[ée]missivit[ée]\b|\b(?:verre|vitrage)\s+(?:à\s+)?contrôle\s+solaire\b",
             _I,
         ),
         0.75,
@@ -112,7 +153,7 @@ RULES: list[Rule] = [
     ),
     Rule(
         F.SPACER,
-        re.compile(r"\bintercalaire\s+[^.;,\n]{2,40}|\bwarm[- ]edge\b|\bbord chaud\b", _I),
+        re.compile(r"\bintercalaires?\s+[^.;,\n)]{2,40}|\bwarm[- ]edge\b|\bbord chaud\b", _I),
         0.7,
     ),
     Rule(
@@ -129,7 +170,7 @@ RULES: list[Rule] = [
     Rule(
         F.OPENING_TYPE,
         re.compile(
-            r"\b(?:oscillo-battants?|ouvrants?\s+à\s+la\s+française|coulissants?(?:\s+à\s+galandage)?|galandage|levant[- ]coulissant|châssis\s+fixes?|portes?-fenêtres?|portes?\s+d'entrée|soufflets?)\b",
+            r"\b(?:oscillo[- ]?battants?|ouvrants?\s+à\s+la\s+française|coulissants?(?:\s+à\s+galandage)?|galandage|levant[- ]coulissant|châssis\s+fixes?|portes?-fenêtres?|portes?\s+d'entrée|soufflets?)\b",
             _I,
         ),
         0.7,
@@ -138,6 +179,14 @@ RULES: list[Rule] = [
         F.PROFILE_SYSTEM,
         re.compile(
             r"\b(?:type|gamme|profilés?)\s+[^.;\n]{2,60}?ou\s+(?:techniquement\s+)?équivalent", _I
+        ),
+        0.65,
+    ),
+    Rule(
+        F.PROFILE_SYSTEM,
+        re.compile(
+            r"\b(?:\d{2,3}\s*mm[^.;\n]{0,25}?)?\b(?:[3-8]|trois|quatre|cinq|six|sept|huit)\s+chambres\b(?:[^.;\n]{0,50})?",
+            _I,
         ),
         0.65,
     ),
@@ -155,7 +204,7 @@ RULES: list[Rule] = [
     Rule(
         F.HARDWARE,
         re.compile(
-            r"\b(?:crémone[^.;,\n]{0,45}|paumelles?[^.;,\n]{0,30}|ferme-porte[^.;,\n]{0,40}|poignées?[^.;,\n]{0,40})",
+            r"\b(?:crémone[^.;,\n]{0,45}|paumelles?[^.;,\n]{0,30}|ferme-porte[^.;,\n]{0,40}|poignées?[^.;,\n]{0,40}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy)\b[^.;,\n]{0,30})",
             _I,
         ),
         0.6,
@@ -163,18 +212,30 @@ RULES: list[Rule] = [
     Rule(
         F.SHUTTERS,
         re.compile(
-            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+[^.;,\n]{2,40}|\bmanœuvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))[^.;\n]{0,40}",
+            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+[^.;,\n]{2,40}|\bmanœuvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))[^.;\n]{0,40}",
             _I,
         ),
         0.65,
     ),
     Rule(F.AIR_INLETS, re.compile(r"\bentrées?\s+d'air[^.;\n]{0,110}", _I), 0.7),
     Rule(
+        F.AIR_INLETS,
+        re.compile(
+            r"\b(?:Aldes|Aldès|Anjos|Renson)\b[^.;\n]{0,50}|\b(?:auto|hygro)réglables?\b[^.;\n]{0,40}",
+            _I,
+        ),
+        0.65,
+        requires=re.compile(r"\bair\b|ventilation|VMC|mortais", _I),
+    ),
+    Rule(
         F.ACCESSIBILITY,
         re.compile(
             r"\bPMR\b[^.;\n]{0,60}|\bseuil[^.;,\n]{0,60}|\beffort de manœuvre[^.;,\n]{0,40}", _I
         ),
         0.65,
+        excludes=re.compile(
+            r"\b(?:NF\s+)?EN\s?\d{4,5}\b", _I
+        ),  # a standard's title, not a requirement
     ),
     Rule(
         F.INSTALLATION,
