@@ -93,8 +93,12 @@ class OpenAICompatibleLLM:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    @property
+    def chat_url(self) -> str:
+        return f"{self.base_url}/chat/completions"
+
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self.base_url}/chat/completions"
+        url = self.chat_url
         delay = 1.0
         for attempt in range(self.max_retries + 1):
             try:
@@ -135,26 +139,19 @@ class OpenAICompatibleLLM:
         started = time.perf_counter()
 
         for repair_round in range(2):
-            payload: dict[str, Any] = {
-                "model": self.model,
-                "messages": chat,
-                "max_tokens": max_tokens or self.max_output_tokens,
-                "temperature": 0,
-            }
-            if schema is not None:
-                payload["response_format"] = self._response_format(schema)
+            payload = self._payload(chat, schema, max_tokens or self.max_output_tokens)
             try:
                 data = await self._post(payload)
             except LLMError as exc:
                 if schema is not None and self._json_schema_supported and "HTTP 400" in str(exc):
                     log.info("%s rejected json_schema; falling back to JSON mode", self.name)
                     self._json_schema_supported = False
-                    payload["response_format"] = self._response_format(schema)
+                    payload = self._payload(chat, schema, max_tokens or self.max_output_tokens)
                     data = await self._post(payload)
                 else:
                     raise
             self._account(usage, data)
-            text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+            text = self._reply_text(data)
             if schema is None:
                 usage.seconds = time.perf_counter() - started
                 return Completion(text=text, parsed=None, usage=usage, model=self.name)
@@ -175,6 +172,22 @@ class OpenAICompatibleLLM:
             usage.seconds = time.perf_counter() - started
             return Completion(text=text, parsed=parsed, usage=usage, model=self.name)
         raise LLMError(f"{self.name}: no valid output")  # pragma: no cover
+
+    def _payload(
+        self, chat: list[dict[str, str]], schema: type[BaseModel] | None, max_tokens: int
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": chat,
+            "max_tokens": max_tokens,
+            "temperature": 0,
+        }
+        if schema is not None:
+            payload["response_format"] = self._response_format(schema)
+        return payload
+
+    def _reply_text(self, data: dict[str, Any]) -> str:
+        return str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
 
     def _response_format(self, schema: type[BaseModel]) -> dict[str, Any]:
         if self._json_schema_supported:

@@ -5,7 +5,7 @@ Set the model with `ZELLES_LLM_MODEL` (or `-m` on the CLI) as `provider:model`.
 | Provider | Example | Notes |
 |---|---|---|
 | none | `none` | Rules only. Free, offline, deterministic. |
-| Ollama | `ollama:qwen3:8b` | Local. `OLLAMA_HOST` is honoured. |
+| Ollama | `ollama:qwen3:8b` | Local, native `/api/chat`. `OLLAMA_HOST` is honoured. |
 | llama.cpp server | `llamacpp:local` | Local, `llama-server` on port 8080. |
 | vLLM, LM Studio | `vllm:<model>`, `lmstudio:<model>` | Local or self-hosted GPU. |
 | Anthropic | `anthropic:claude-sonnet-5-5` | Official SDK, structured outputs, prompt caching. |
@@ -39,5 +39,7 @@ These are estimates; every analysis records the real token counts and cost in th
 
 ## How a provider is called
 
+- **Ollama adapter:** uses the native `/api/chat` endpoint so it can set the context window (`ZELLES_OLLAMA_NUM_CTX`, default 8192; Ollama's own default is often 4096 and silently cuts the start of long prompts) and turn reasoning off (`ZELLES_OLLAMA_THINK=false`). Thinking models such as granite4 or qwen3 otherwise spend the whole output budget reasoning and return no JSON. Passages sent to the model are sized to fit the window.
+- **Timeouts:** 600 s per reply for local servers, 180 s for cloud APIs (`ZELLES_LLM_TIMEOUT_S`). A timeout is reported as such and not retried.
 - **OpenAI-compatible adapter:** sends a JSON schema in `response_format`; falls back to `json_object` if the server rejects it (older llama.cpp or Ollama builds), then validates with Pydantic and asks once for a repair if needed. Retries with exponential backoff on 429 and 5xx.
 - **Anthropic adapter:** uses `messages.parse` with the Pydantic schema, marks the system prompt (instructions plus the document) with `cache_control`, enables server-side model fallbacks for the models that support them, and treats a `refusal` stop reason as an error instead of parsing it.

@@ -54,6 +54,14 @@ class Settings(BaseSettings):
         default=2, description="Parallel LLM calls. Use 1 for a single local GPU."
     )
     llm_max_output_tokens: int = 4096
+    ollama_num_ctx: int = Field(
+        default=8192,
+        description="Context window requested from Ollama. Its own default is often 4096, "
+        "too small for CCTP passages.",
+    )
+    ollama_think: bool = Field(
+        default=False, description="Let Ollama thinking models reason before answering."
+    )
     llm_price_input_per_mtok: float | None = Field(
         default=None, description="USD per million input tokens, to override the built-in table."
     )

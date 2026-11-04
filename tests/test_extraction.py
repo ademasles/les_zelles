@@ -6,11 +6,13 @@ from zelles.domain.spec import (
     RequirementStatus,
     SpecField,
 )
+from zelles.extraction.llm_extractor import LLMExtractor
 from zelles.extraction.merge import merge_requirements
 from zelles.extraction.rules import extract_with_rules
 from zelles.extraction.verify import locate_quote, verify_requirement
 from zelles.ingest.chunking import chunk_document
 from zelles.ingest.parsers import parse_document
+from zelles.llm.fake import FakeLLM
 
 
 def _chunks(sample_bytes: bytes) -> list[Chunk]:
@@ -100,3 +102,14 @@ def test_merge_boosts_agreement(sample_bytes: bytes) -> None:
     assert uw[0].confidence > rule_uw.confidence
     assert uw[0].scope == "Logements"
     assert "confirmed by rules and LLM" in uw[0].notes
+
+
+def test_llm_extractor_fits_the_context_window() -> None:
+    unbounded = LLMExtractor(FakeLLM(lambda *_: None))
+    small = FakeLLM(lambda *_: None)
+    small.context_tokens = 8192  # type: ignore[attr-defined]
+    bounded = LLMExtractor(small)
+    assert unbounded.whole_document_chars == 24_000
+    assert bounded.whole_document_chars < 16_000
+    prompt_tokens = (bounded.max_context_chars + 1_100 + 3_000) / 3.2
+    assert prompt_tokens + 2048 < 8192

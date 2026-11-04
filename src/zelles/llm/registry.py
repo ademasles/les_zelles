@@ -51,6 +51,19 @@ def create_llm(spec: str, settings: Settings) -> LLM | None:
             max_output_tokens=settings.llm_max_output_tokens,
             price=price,
         )
+    if provider == "ollama":
+        from zelles.llm.ollama import OllamaLLM  # noqa: PLC0415
+
+        return OllamaLLM(
+            model,
+            num_ctx=settings.ollama_num_ctx,
+            think=settings.ollama_think,
+            base_url=settings.llm_base_url,
+            timeout_s=timeout_s,
+            max_retries=settings.llm_max_retries,
+            max_output_tokens=settings.llm_max_output_tokens,
+            price=price,
+        )
     if provider not in PRESETS:
         known = ", ".join(sorted([*PRESETS, "anthropic"]))
         raise LLMError(f"unknown provider {provider!r}; use one of: {known}")
