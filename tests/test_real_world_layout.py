@@ -185,7 +185,7 @@ def test_generic_headings_do_not_set_the_scope() -> None:
         id="c0",
         index=0,
         text="x",
-        section_path=["Lot 1", "6.3 OCCULTATION", "FABRICATION"],
+        section_path=["Lot 1", "6.3 OCCULTATION", "FABRICATION", "MIROITERIE"],
         lot="Lot 1",
     )
     assert chunk.scope == "6.3 OCCULTATION"

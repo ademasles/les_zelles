@@ -78,7 +78,8 @@ _GENERIC_HEADING = re.compile(
     r"^\s*(?:[\d.]+\s*)?(?:g[ée]n[ée]ralit[ée]s|objet|description|travaux|sp[ée]cifications?|"
     r"prescriptions?|performances?|caract[ée]ristiques?|mat[ée]riaux|fabrication|mise\s+en\s+(?:œ|oe)uvre|"
     r"documents?|normes?|r[ée]glementation|r[ée]f[ée]rences?|essais|contr[ôo]les?|garanties?|"
-    r"nettoyage|r[ée]ception|pr[ée]sentation|composition|qualit[ée]|conditions?)\b",
+    r"nettoyage|r[ée]ception|pr[ée]sentation|composition|qualit[ée]|conditions?|"
+    r"miroiterie|vitrages?|quincaillerie|ferrages?|finitions?|teintes?|coloris|accessoires)\b",
     re.IGNORECASE,
 )
 
