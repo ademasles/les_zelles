@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 
 from zelles.domain.spec import FIELD_CATALOG, SpecSheet
+
+_ILLEGAL_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
 
 COLUMNS = [
     "category",
@@ -58,6 +61,13 @@ def to_csv(sheet: SpecSheet) -> str:
     return buffer.getvalue()
 
 
+def _xml_safe(value: object) -> object:
+    """Excel cells cannot hold control characters or non-characters such as U+FFFE."""
+    if isinstance(value, str):
+        return _ILLEGAL_XML.sub("", value)
+    return value
+
+
 def to_xlsx(sheet: SpecSheet) -> bytes:
     from openpyxl import Workbook  # noqa: PLC0415
     from openpyxl.styles import Alignment, Font, PatternFill  # noqa: PLC0415
@@ -71,7 +81,7 @@ def to_xlsx(sheet: SpecSheet) -> bytes:
         cell.fill = PatternFill("solid", fgColor="2F4858")
     fills = {"verified": "E3F2E1", "unverified": "FFF4D6", "invalid": "FBE3E1"}
     for row in rows(sheet):
-        ws.append([row[c] for c in COLUMNS])
+        ws.append([_xml_safe(row[c]) for c in COLUMNS])
         fill = fills.get(str(row["status"]))
         if fill:
             ws.cell(ws.max_row, COLUMNS.index("status") + 1).fill = PatternFill(
@@ -94,7 +104,7 @@ def to_xlsx(sheet: SpecSheet) -> bytes:
     info.append(["LLM calls", sheet.usage.calls])
     info.append(["Estimated cost (USD)", sheet.usage.cost_usd])
     if sheet.summary:
-        info.append(["Summary", sheet.summary])
+        info.append(["Summary", _xml_safe(sheet.summary)])
     buffer = io.BytesIO()
     wb.save(buffer)
     return buffer.getvalue()

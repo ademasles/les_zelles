@@ -32,6 +32,7 @@ _REPLACEMENTS = {
     "\x1e": "-",
     "\x1f": "",
     "\x02": "-",
+    "\ufffe": "-",  # pdfium's marker for a hyphen at a line break
 }
 # Symbol fonts (Wingdings, Symbol) map bullets to the private use area.
 _PRIVATE_USE = re.compile(r"[\ue000-\uf8ff]")
