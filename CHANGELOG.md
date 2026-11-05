@@ -20,6 +20,8 @@ Complete rewrite as an installable Python package (`zelles`). The project is now
 ### Changed
 - Rules cover more real CCTP wordings (dotted AFNOR standards, SWC / TL global, facade dB apart from box and inlet ratings, plaxé and laqué finishes, "type X ou équivalent" routed by subject) and no longer emit free-text catch-alls for air inlets, caulking or profiles.
 - The evaluation matcher treats separator, dotted-abbreviation and ordinal variants as equal ("NF P 20-501" = "20.501", "D.T.U. n°39" = "DTU 39", "1er" = "1").
+- Shutter-box Dn,e,w ratings are filed under acoustic, apart from facade values and air-inlet ratings; SNFQ is a certification.
+- Descriptive fields (hardware, glazing, accessibility, finish…) are no longer read from reference-list items, from works listed as outside the lot, or from the regulatory note on handle height.
 
 ### Removed
 - The previous FastAPI backend and Streamlit frontend, with their torch, sentence-transformers, FAISS and PyMuPDF (AGPL) dependencies.

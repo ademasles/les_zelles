@@ -91,8 +91,18 @@ def test_facade_db_kept_apart_from_box_and_inlet_db() -> None:
         "Coffres de volets roulants sans EA Dn,e,w + Ctr ≥ 48 dB "
         "Entrées d'air dans châssis Dn,e,w + Ctr ≥ 39 dB"
     )
-    assert _numbers(reqs, F.ACOUSTIC) == {30, 35, 38}
+    # facade values plus the shutter box's own Dn,e,w; never the inlet's 39 dB
+    assert _numbers(reqs, F.ACOUSTIC) == {30, 35, 38, 48}
     assert "39 dB" in _values(reqs, F.AIR_INLETS)
+
+
+def test_shutter_box_rating_under_a_shutter_heading() -> None:
+    reqs = _extract(
+        "Performance acoustique\n\nDne,w,Ctr = 45 dB\n\n"
+        "Coffres : Dn,e,w + Ctr ≥ 47 à 42 dB suivant façades (sans entrée d'air)",
+        heading="2.3 Volets roulants",
+    )
+    assert _numbers(reqs, F.ACOUSTIC) == {45, 47, 42}
 
 
 def test_finishes_and_named_colours() -> None:
@@ -157,6 +167,24 @@ def test_marks_classes_and_dated_texts() -> None:
 def test_fire_class_read_under_a_fire_heading() -> None:
     reqs = _extract("Les menuiseries PVC sont M1 ou M2 au maximum.", heading="2.2 Tenue au feu")
     assert {"M1", "M2"} <= _values(reqs, F.CERTIFICATIONS)
+
+
+def test_precision_reference_lists_and_works_outside_the_lot() -> None:
+    reqs = _extract(
+        "- NF P 78-303 Verre feuilleté pour vitrage de bâtiment\n"
+        "- N.F. P 26 303 Crémone : caractéristiques et essais\n\n"
+        "Ne font pas partie du présent lot :\n"
+        "- l'exécution des seuils de portes-fenêtres et des appuis\n"
+        "- les serrures des portes palières\n\n"
+        "Conformément à la réglementation, les poignées seront placées entre 0,90 m et 1,30 m.\n\n"
+        "Poignée laquée blanc placée entre 0,90 m et 1,30 m du sol."
+    )
+    assert not _values(reqs, F.SAFETY_GLAZING)
+    hardware = " | ".join(_values(reqs, F.HARDWARE)).lower()
+    assert "crémone" not in hardware and "serrure" not in hardware
+    assert hardware.count("poign") == 1  # the handle spec, not the regulatory note
+    assert not any(v.lower().startswith("seuil") for v in _values(reqs, F.ACCESSIBILITY))
+    assert any("0,90 m" in v for v in _values(reqs, F.ACCESSIBILITY))
 
 
 def test_precision_no_free_text_catch_alls() -> None:

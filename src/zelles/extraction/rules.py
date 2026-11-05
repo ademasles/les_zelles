@@ -45,6 +45,10 @@ class Rule:
     # the section headings must not match this (coffre ranges are not facade values)
     heading_excludes: re.Pattern[str] | None = None
     in_heading: bool = False  # also match inside the heading line (standards listed as items)
+    # the few words just before the match must match this (the item being rated)
+    before_requires: re.Pattern[str] | None = None
+    # the section headings must match this ("Volets roulants" > "Dne,w + Ctr = 45 dB")
+    heading_requires: re.Pattern[str] | None = None
 
 
 _BEFORE = 80  # characters looked at by ``before_excludes``
@@ -76,6 +80,12 @@ _NOT_FACADE_DB = re.compile(
 # Same for an air inlet's own rating: not when a shutter box is the item being rated.
 _BOX_DB = re.compile(
     r"(?:coffres?|\bEA\b|volets?\s+roulants?)(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$", _I
+)
+# Shutter-box sound rating: "Coffres … Dn,e,w + Ctr ≥ 48 dB", "Dne,w,Ctr = 45 dB".
+DNEW = r"\bDn\s*,?\s*e\s*,?\s*w\s*[,+]?\s*\+?\s*C\s*tr\b"
+_BOX_HEADING = re.compile(r"coffres?|volets?\s+roulants?", _I)
+_INLET_ITEM = re.compile(
+    r"(?:entr[ée]es?\s+d'air|grilles?|bouches?)(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$", _I
 )
 # A material named in a standard's title ("DTU 36.1 / Menuiseries en bois") is no requirement.
 _STANDARD_TITLE = re.compile(r"\b(?:NF\s+)?DTU\b|D\.T\.U|\bNF\s?[A-Z]?\s?\d|\bnormes?\b", _I)
@@ -182,6 +192,30 @@ RULES: list[Rule] = [
         requires=re.compile(r"Ra\s*,\s*tr|acoustique|affaiblissement|DnT|isolement", _I),
         before_excludes=_NOT_FACADE_DB,
         heading_excludes=re.compile(r"coffres?|volets?|entr[ée]es?\s+d'air|grilles?", _I),
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # a shutter box rated in a list of items: "Coffres de VR … Dn,e,w + Ctr ≥ 48 dB"
+        F.ACOUSTIC,
+        re.compile(rf"{DNEW}\s*(?:[≥=:]\s*)?(\d{{2}}){DB}", _I),
+        0.75,
+        before_requires=_BOX_DB,
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # ...or under a shutter heading: "Volets roulants" > "Dne,w,Ctr = 45 dB"
+        F.ACOUSTIC,
+        re.compile(rf"{DNEW}\s*(?:[≥=:]\s*)?(\d{{2}})(?:\s*(?:à|-)\s*\d{{2}})?{DB}", _I),
+        0.75,
+        heading_requires=_BOX_HEADING,
+        before_excludes=_INLET_ITEM,
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # the upper end of a box range: "Dn,e,w + Ctr ≥ 47 à 42 dB"
+        F.ACOUSTIC,
+        re.compile(rf"(?<=\d)\s*à\s*(\d{{2}}){DB}", _I),
+        0.7,
+        requires=re.compile(DNEW, _I),
+        heading_requires=_BOX_HEADING,
+        before_excludes=_INLET_ITEM,
         normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(
@@ -400,8 +434,8 @@ RULES: list[Rule] = [
             _I,
         ),
     ),
-    Rule(  # quality mark of hinges and locks
-        F.HARDWARE,
+    Rule(  # quality mark of hinges and locks, a certification like NF Fermetures
+        F.CERTIFICATIONS,
         re.compile(r"\b(?:NF\s*-\s*)?S\.?N\.?F\.?Q\.?(?:\s*-?\s*1)?\b"),
         0.6,
     ),
@@ -569,7 +603,7 @@ RULES: list[Rule] = [
     Rule(
         F.REGULATION,
         re.compile(
-            r"\b(arrêtés?|circulaires?|ordonnances?)\b[^.;\n]{0,70}?\bdu\s+(\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4})\b",
+            r"\b(arrêtés?|décrets?|circulaires?|ordonnances?)\b[^.;\n]{0,70}?\bdu\s+(\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4})\b",
             _I,
         ),
         0.85,
@@ -605,8 +639,55 @@ _ONE_PER_ARTICLE = frozenset(
         F.GLAZING_TYPE,
         F.SPACER,
         F.OPENING_TYPE,
+        F.SAFETY_GLAZING,
     }
 )
+
+# Descriptive fields are not read from a reference list item ("- NF P 78-303 Verre feuilleté",
+# "N.F. P 26 303 Crémone : caractéristiques") nor from a list of works outside the lot.
+_DESCRIPTIVE = frozenset(
+    {
+        F.HARDWARE,
+        F.SAFETY_GLAZING,
+        F.GLAZING_TYPE,
+        F.ACCESSIBILITY,
+        F.FINISH,
+        F.OPENING_TYPE,
+        F.FRAME_MATERIAL,
+        F.SHUTTERS,
+        F.INSTALLATION,
+    }
+)
+_REFERENCE_ITEM = re.compile(
+    r"^\W*(?:NF\b|N\.\s?F\.|EN\s?\d|ISO\s?\d|D\.?\s?T\.?\s?U\b|[PBA]\s?\d{2}[.\-]\d)"
+)
+_EXCLUSION_LEAD = re.compile(
+    r"\bne\s+(?:font|fait)\s+pas\s+partie\b|\bprestations?\s+exclues?\b|\bsont\s+exclus\b", _I
+)
+# The handle's position is an accessibility rule, not a hardware spec.
+_HANDLE_POSITION = re.compile(r"\bpositionn[ée]|\bréglementation|\bconformément", _I)
+
+
+_ACCESS_CONTEXT = re.compile(
+    r"\bPMR\b|handicap|accessib|mobilité\s+réduite|\d\s*cm\b|ressaut|plan\s+incliné", _I
+)
+
+
+def _excluded_spans(body: str) -> list[tuple[int, int]]:
+    """Lines listed after "Ne font pas partie du présent lot :" up to the next lead-in line."""
+    spans: list[tuple[int, int]] = []
+    for lead in _EXCLUSION_LEAD.finditer(body):
+        start = body.find("\n", lead.end())
+        if start < 0:
+            continue
+        end = start
+        for line in re.finditer(r"[^\n]*\n?", body[start + 1 :]):
+            text = line.group(0).strip()
+            if not text.startswith(("-", "•", "▪", "–", "o ")):  # the list ends with its items
+                break
+            end = start + 1 + line.end()
+        spans.append((start, end))
+    return spans
 
 
 def describes_existing(chunk: Chunk) -> bool:
@@ -629,6 +710,44 @@ def _sentence_around(text: str, pos: int) -> str:
     return text.strip()
 
 
+def _keep(
+    rule: Rule,
+    match: re.Match[str],
+    *,
+    body: str,
+    sentence: str,
+    headings: str,
+    outside_lot: list[tuple[int, int]],
+) -> bool:
+    """Apply a rule's context checks to one match."""
+    if rule.requires is not None and not rule.requires.search(sentence):
+        return False
+    if rule.excludes is not None and rule.excludes.search(sentence):
+        return False
+    if rule.context_requires is not None and not rule.context_requires.search(
+        f"{sentence} {headings}"
+    ):
+        return False
+    before = body[max(0, match.start() - _BEFORE) : match.start()]
+    if rule.before_excludes is not None and rule.before_excludes.search(before):
+        return False
+    if rule.before_requires is not None and not rule.before_requires.search(before):
+        return False
+    if rule.field in _DESCRIPTIVE and (
+        _REFERENCE_ITEM.search(sentence) or any(a <= match.start() < b for a, b in outside_lot)
+    ):
+        return False
+    word = match.group(0).lower()
+    if rule.field == F.HARDWARE and word.startswith("poign") and _HANDLE_POSITION.search(sentence):
+        return False  # the accessibility note on handle height, not a handle spec
+    # a threshold is an accessibility item only in a PMR context
+    return not (
+        rule.field == F.ACCESSIBILITY
+        and word.startswith("seuil")
+        and not _ACCESS_CONTEXT.search(f"{sentence} {headings}")
+    )
+
+
 def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     """Run every rule over every chunk and return cited requirements."""
     found: dict[tuple[str, str, str], Requirement] = {}
@@ -640,23 +759,23 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
         # The heading line is context, not a requirement ("4.1 Volets roulants").
         skip = len(chunk.heading) if chunk.heading and body.startswith(chunk.heading) else 0
         headings = " > ".join(chunk.section_path)
+        outside_lot = _excluded_spans(body)
         for rule in RULES:
             if rule.heading_excludes is not None and rule.heading_excludes.search(headings):
+                continue
+            if rule.heading_requires is not None and not rule.heading_requires.search(headings):
                 continue
             for match in rule.pattern.finditer(body):
                 if match.start() < skip and not rule.in_heading:
                     continue
                 sentence = _sentence_around(body, match.start())
-                if rule.requires is not None and not rule.requires.search(sentence):
-                    continue
-                if rule.excludes is not None and rule.excludes.search(sentence):
-                    continue
-                if rule.context_requires is not None and not rule.context_requires.search(
-                    f"{sentence} {headings}"
-                ):
-                    continue
-                if rule.before_excludes is not None and rule.before_excludes.search(
-                    body[max(0, match.start() - _BEFORE) : match.start()]
+                if not _keep(
+                    rule,
+                    match,
+                    body=body,
+                    sentence=sentence,
+                    headings=headings,
+                    outside_lot=outside_lot,
                 ):
                     continue
                 raw = " ".join(match.group(0).split()).rstrip(" ,;:")
