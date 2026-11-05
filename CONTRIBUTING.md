@@ -16,7 +16,16 @@ make check
 - Tests never call the network. Use `zelles.llm.fake.FakeLLM` and `HashEmbedder`, or `respx` for HTTP adapters.
 - A change to rules, prompts or verification comes with the `zelles eval` result before and after.
 - Keep the domain layer (`zelles.domain`) free of I/O.
-- Commits follow [Conventional Commits](https://www.conventionalcommits.org/): `feat(extract): detect Ra,tr on facade tables`.
+- Commits and PR titles follow the conventions below.
+
+## Commits and pull requests
+
+- [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): imperative subject`, under 72 characters, ideally about 50. Example: `feat(extract): detect Ra,tr on facade tables`.
+- Types: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`. Scopes follow the packages: `ingest`, `extract`, `llm`, `retrieval`, `graph`, `agent`, `api`, `web`, `storage`, `eval`, plus `deps`, `ci` and `docs`.
+- One change per commit. Add a body only when the why is not obvious from the diff.
+- Branches are short-lived and named after the change (`feat/rules-precision`, `fix/ollama-timeout`).
+- PRs are squash-merged, and the PR title becomes the commit on main, so it follows the same format. The `PR title` check enforces it; the `commit-msg` hook (`uv run pre-commit install`) checks local commits.
+- PR descriptions follow the template: Summary, Why, Testing. For a change to rules, prompts or verification, put the `zelles eval` result before and after in Why.
 
 ## Adding a field
 
