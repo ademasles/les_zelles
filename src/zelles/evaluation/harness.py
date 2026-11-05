@@ -65,7 +65,7 @@ def matches(pred: Requirement, exp: Expected) -> bool:
     return want in have
 
 
-_ACRONYM = re.compile(r"\b((?:[a-z]\.)+[a-z])\b\.?")  # "d.t.u." / "s.n.j.f" -> "dtu" / "snjf"
+_ACRONYM = re.compile(r"\b((?:[a-z]+\.)+[a-z]+)\b\.?")  # "d.t.u." / "cer.f.f" -> "dtu" / "cerff"
 _NF_PREFIX = re.compile(r"\bnf\s*\.\s*(?=[a-z])|\bnf(?=[abepsx]\s*\d)")  # "nf.p", "nfp 20"
 _NUMERO = re.compile(r"\bn\s*[°º]\s*")  # "n°39", "n° 39"
 _FIRST = re.compile(r"\b1er\b")  # "1er août" = "1 août"
