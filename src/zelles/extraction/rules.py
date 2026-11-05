@@ -38,6 +38,16 @@ class Rule:
     requires: re.Pattern[str] | None = None  # the sentence must also match this
     excludes: re.Pattern[str] | None = None  # ...and must not match this
     normalize: Callable[[re.Match[str]], str] | None = None
+    # the few words just before the match must not match this ("Dn,e,w + Ctr ≥ 39 dB")
+    before_excludes: re.Pattern[str] | None = None
+    # the sentence or its section headings must match this ("Tenue au feu" > "... sont M1")
+    context_requires: re.Pattern[str] | None = None
+    # the section headings must not match this (coffre ranges are not facade values)
+    heading_excludes: re.Pattern[str] | None = None
+    in_heading: bool = False  # also match inside the heading line (standards listed as items)
+
+
+_BEFORE = 80  # characters looked at by ``before_excludes``
 
 
 def _material(match: re.Match[str]) -> str:
@@ -54,15 +64,79 @@ def _material(match: re.Match[str]) -> str:
 NUM = r"(\d+(?:[.,]\d+)?)"
 CMP = r"(?:\s*(?:[:=]|≤|≥|<=|>=|<|>|inférieur(?:e)?\s+(?:ou\s+égal\s+)?à|supérieur(?:e)?\s+(?:ou\s+égal\s+)?à|de|d'au plus|d'au moins|maxi(?:mum)?|mini(?:mum)?)\s*)*"
 U_UNIT = r"(?:\s*W\s*/\s*\(?\s*m\s*2\s*[.·]?\s*K\s*\)?)?"
+PAREN = r"(?:\s*\([^)\n]{0,60}\))?"  # "SWC (facteur solaire hiver sans protection) = 0,38"
+DB = r"\s*d\s?\(?B\)?(?:\s*\(?A\)?)?"  # "dB", "dB(A)", "d(B)"
+
+# What sits just before a dB value that belongs to a shutter box or an air inlet.
+_NOT_FACADE_DB = re.compile(
+    r"(?:Dn\s*,\s*e|coffres?|\bEA\b|entr[ée]es?\s+d'air|grilles?|bouches?)"
+    r"(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$",  # ...with no other dB value in between
+    _I,
+)
+# Same for an air inlet's own rating: not when a shutter box is the item being rated.
+_BOX_DB = re.compile(
+    r"(?:coffres?|\bEA\b|volets?\s+roulants?)(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$", _I
+)
+# A material named in a standard's title ("DTU 36.1 / Menuiseries en bois") is no requirement.
+_STANDARD_TITLE = re.compile(r"\b(?:NF\s+)?DTU\b|D\.T\.U|\bNF\s?[A-Z]?\s?\d|\bnormes?\b", _I)
+# "type X de chez Y ou équivalent": the product family follows the sentence's subject.
+_TYPE_X = (
+    r"\b(?:type|gamme|modèle|marque)\s+(?:de\s+)?[^.;\n]{2,60}?ou\s+(?:techniquement\s+)?équivalent"
+)
+_GLASS_SUBJECT = re.compile(r"\bvitrages?\b|\bverres?\b|\bglaces?\b", _I)
+_SAFETY_GLASS = re.compile(r"feuillet|stadip|anti-?\s?chute|effraction|sécurit|\bSP\s?\d", _I)
+_SHUTTER_SUBJECT = re.compile(r"\bvolets?\b|\bcoffres?\b|\bstores?\b|\btabliers?\b", _I)
+_HARDWARE_SUBJECT = re.compile(
+    r"crémone|serrures?|ferme-?\s?portes?|quincaillerie|poignées?|anti-?\s?panique|barres?|"
+    r"ventouses?|béquilles?|paumelles?|bandeaux?|limiteurs?|butées?",
+    _I,
+)
+_SEAL_SUBJECT = re.compile(r"\bjoints?\b|\bmousses?\b|\bbandes?\b|calfeutrement|compriband", _I)
+_PRODUCT_NOT_PROFILE = re.compile(
+    rf"{_GLASS_SUBJECT.pattern}|{_SHUTTER_SUBJECT.pattern}|{_HARDWARE_SUBJECT.pattern}|"
+    rf"{_SEAL_SUBJECT.pattern}|entr[ée]es?\s+d'air|grilles?|isolation|isolants?|laine|panneaux?",
+    _I,
+)
+
+
+def _ral(match: re.Match[str]) -> str:
+    """'RAL Gris 7007' -> 'gris RAL 7007'; a plain 'gris anthracite RAL 7016' is kept."""
+    text = " ".join(match.group(0).split())
+    inner = re.match(r"(?i)(.*?)\bRAL\s+([A-Za-zÀ-ÿ ]+?)\s+(\d{4})(.*)", text)
+    if inner:
+        before, words, code, after = inner.groups()
+        return " ".join(f"{before} {words.lower()} RAL {code}{after}".split())
+    return text
+
+
+def _finish(match: re.Match[str]) -> str:
+    """One spelling per finish: 'teintées dans la masse' -> 'teinté dans la masse'."""
+    text = " ".join(match.group(0).split())
+    text = re.sub(r"(?i)\bteint[ée]e?s?(?=\s+dans)", "teinté", text)
+    return re.sub(r"(?i)\bthermolaqu[ée]e?s?\b", "thermolaqué", text)
+
+
+def _date_text(match: re.Match[str]) -> str:
+    """Keep the kind of text and its date, drop the title in between."""
+    return f"{match.group(1)} du {match.group(2)}"
+
 
 RULES: list[Rule] = [
-    Rule(F.UW, re.compile(rf"\bUw\b{CMP}{NUM}{U_UNIT}", _I), 0.9),
+    Rule(F.UW, re.compile(rf"\bUw\b(?:\s+moyen)?{CMP}{NUM}{U_UNIT}", _I), 0.9),
     Rule(F.UG, re.compile(rf"\bUg\b{CMP}{NUM}{U_UNIT}", _I), 0.9),
-    Rule(F.UJN, re.compile(rf"\bUjn\b{CMP}{NUM}{U_UNIT}", _I), 0.9),
+    Rule(F.UJN, re.compile(rf"\b(?:Ujn|Uws)\b{PAREN}{CMP}{NUM}{U_UNIT}", _I), 0.85),
     Rule(F.SW, re.compile(rf"\b(?:Sw|facteur solaire(?:\s+Sw)?)\b{CMP}{NUM}\s*%?", _I), 0.85),
+    Rule(  # "SWC (facteur solaire hiver …) = 0,38", "SW (avec protection) = 0,25"
+        F.SW,
+        re.compile(rf"\bS\s?W\s?[CE]?\b{PAREN}{CMP}{NUM}\s*%?", _I),
+        0.8,
+    ),
     Rule(
         F.TLW,
-        re.compile(rf"\b(?:TLw|transmission lumineuse(?:\s+TLw)?)\b{CMP}{NUM}\s*%?", _I),
+        re.compile(
+            rf"\b(?:TLw|TL\s+global|transmission lumineuse(?:\s+TLw)?)\b{PAREN}{CMP}{NUM}\s*%?",
+            _I,
+        ),
         0.85,
     ),
     Rule(
@@ -85,45 +159,49 @@ RULES: list[Rule] = [
     Rule(
         F.ACOUSTIC,
         re.compile(
-            rf"\b(?:Ra\s*,\s*tr|R\s*A\s*,\s*tr|Rw\s*\(\s*C\s*;\s*Ctr\s*\)|Rw)\b{CMP}{NUM}\s*dB", _I
+            rf"\b(?:Ra\s*,\s*tr|R\s*A\s*,\s*tr|Rw\s*\(\s*C\s*;\s*Ctr\s*\)|Rw)\b{CMP}{NUM}{DB}", _I
         ),
         0.85,
+        heading_excludes=re.compile(r"coffres?|volets?|entr[ée]es?\s+d'air|grilles?", _I),
     ),
     Rule(
         F.ACOUSTIC,
         re.compile(
-            rf"\b(?:DnT\s*,\s*A\s*,\s*tr|isolement\s+acoustique|affaiblissement\s+acoustique|classement\s+de\s+façade)\b[^.;\n]{{0,40}}?{NUM}\s*dB(?:\s*\(?A\)?)?",
+            rf"\b(?:DnT\s*,?\s*A\s*,\s*tr|isolement(?:\s+\w+){{0,2}}\s+de\s+façades?|isolement\s+acoustique|affaiblissement\s+acoustique|classement\s+de\s+façade|façades?\s+à)\b[^.;\n]{{0,40}}?{NUM}{DB}",
             _I,
         ),
         0.75,
-        excludes=re.compile(r"entrées?\s+d'air|hygro|bouches?|mortaises?|grilles?", _I),
+        before_excludes=_NOT_FACADE_DB,
+        heading_excludes=re.compile(r"coffres?|volets?|entr[ée]es?\s+d'air|grilles?", _I),
         normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(  # further values in the same sentence: "..., 28 dB pour les autres façades"
         F.ACOUSTIC,
-        re.compile(r"(?<![\w,.])(\d{2})\s*dB(?:\s*\(?A\)?)?"),
+        re.compile(rf"(?<![\w,.])(\d{{2}}){DB}"),
         0.7,
-        requires=re.compile(r"Ra\s*,\s*tr|acoustique|affaiblissement|DnT", _I),
-        excludes=re.compile(r"entrées?\s+d'air|grilles?|mortaises?|Dn\s*,\s*e", _I),
+        requires=re.compile(r"Ra\s*,\s*tr|acoustique|affaiblissement|DnT|isolement", _I),
+        before_excludes=_NOT_FACADE_DB,
+        heading_excludes=re.compile(r"coffres?|volets?|entr[ée]es?\s+d'air|grilles?", _I),
         normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(
         F.COLOR,
         re.compile(
-            r"(?:\b(?:blanc|gris(?:\s+anthracite|\s+clair|\s+foncé)?|noir|beige|ivoire|bronze|chêne doré)\s+)?\bRAL\s*\d{4}(?:\s+(?:sablé|mat|satiné|brillant|texturé|fine structure))?",
+            r"(?:\b(?:blanc|gris(?:\s+anthracite|\s+clair|\s+foncé)?|noir|beige|ivoire|bronze|chêne doré)\s+)?\bRAL\s*(?:[A-Za-zé]+\s+){0,2}?\d{4}(?:\s+(?:sablé|mat|satiné|brillant|texturé|fine structure))?",
             _I,
         ),
         0.85,
+        normalize=_ral,
     ),
     Rule(
         F.COLOR,
         re.compile(
-            r"\b(?:teinte|coloris|couleur|finition)\s*:?\s*(?:blanc(?:he)?|gris(?:\s+(?:anthracite|clair|foncé))?|noir|beige|ivoire|sable|chêne\s+doré|ton\s+bois)\b(?:\s+(?:mat|satiné|brillant|sablé|texturé))?|\b(?:PVC\s+)?blanc(?=\s+teinté\s+dans\s+la\s+masse)|\bgris\s+anthracite\b",
+            r"\b(?:teinte|coloris|couleur|finition)\s*:?\s*(?:blanc(?:he)?|gris(?:\s+(?:anthracite|clair|foncé))?|noir|beige|ivoire|sable|chêne\s+doré|ton\s+bois)\b(?:\s+(?:mat|satiné|brillant|sablé|texturé))?|\b(?:PVC\s+)?blanc(?=\s+teinté\s+dans\s+la\s+masse)|\bgris\s+anthracite\b|\bcanon\s+de\s+fusil\b",
             _I,
         ),
         0.7,
         excludes=re.compile(
-            r"entrées?\s+d'air|grilles?|Aldès|Aldes|joints?|quincaillerie|poignées?", _I
+            r"entr[ée]es?\s+d'air|grilles?|Aldès|Aldes|joints?|quincaillerie|poignées?", _I
         ),
     ),
     Rule(
@@ -140,6 +218,12 @@ RULES: list[Rule] = [
         0.7,
         requires=re.compile(r"vitrage|verre|glace", _I),
     ),
+    Rule(  # "442+16+442": laminated panes written with plus signs
+        F.GLAZING_COMPOSITION,
+        re.compile(r"(?<![\w+])\d{1,3}(?:\s*\+\s*\d{1,3}){2,4}(?![\w+])"),
+        0.75,
+        requires=re.compile(r"vitrage|verre|glace", _I),
+    ),
     Rule(
         F.GLAZING_TYPE,
         re.compile(
@@ -148,13 +232,46 @@ RULES: list[Rule] = [
         ),
         0.75,
     ),
+    Rule(  # obscured or special glass, the gas filling, a named float glass
+        F.GLAZING_TYPE,
+        re.compile(
+            r"\b(?:verre\s+|vitrage\s+)?(?:sablé|dépoli|translucide|imprimé|granité|opaque|occultant)\b|\b(?:remplissage\s+|lame\s+d'|gaz\s+)?argon\b|\bpeu\s+émissif\b|\bisolation\s+thermique\s+renforcée\b|\bplanilux\b",
+            _I,
+        ),
+        0.7,
+        requires=_GLASS_SUBJECT,
+        excludes=re.compile(r"\bRAL\b|teinte|coloris", _I),
+    ),
     Rule(
         F.SAFETY_GLAZING,
         re.compile(
-            r"\b(?:vitrage\s+)?(?:feuilleté|trempé)(?:\s+de\s+sécurité)?(?:\s+\d{2}\.\d)?|\bSP\s?\d{2}\b|\bP[1-8][AB]\b",
+            r"\b(?:vitrage\s+)?(?:feuilleté|trempé)(?:\s+de\s+sécurité)?(?:\s+\d{2}\.\d)?|\bSP\s?\d{2,3}\b|\bP[1-8][AB]\b",
             _I,
         ),
         0.75,
+    ),
+    Rule(  # "STADIP PROTECT 44.2", "sécurit", "anti-effraction", "anti-chute"
+        F.SAFETY_GLAZING,
+        re.compile(
+            r"\bstadip(?:\s+protect)?(?:\s+\d{2}[.,/-]\d)?\b|\bs[ée]curit\b|\b(?:retardateur\s+d'|anti-?\s?)effraction\b|\banti-?\s?chutes?\b|(?<![\w.,/-])([1-9])\1[.,]\d(?![\w.,/-])",
+            _I,
+        ),
+        0.7,
+        requires=re.compile(rf"{_GLASS_SUBJECT.pattern}|{_SAFETY_GLASS.pattern}", _I),
+        excludes=re.compile(r"\bserrures?\b|\bportes?\b(?!-fen)|\bvolets?\b", _I),
+    ),
+    Rule(
+        F.SAFETY_GLAZING,
+        re.compile(_TYPE_X, _I),
+        0.65,
+        requires=_SAFETY_GLASS,
+    ),
+    Rule(
+        F.GLAZING_TYPE,
+        re.compile(_TYPE_X, _I),
+        0.6,
+        requires=_GLASS_SUBJECT,
+        excludes=_SAFETY_GLASS,
     ),
     Rule(
         F.SPACER,
@@ -169,7 +286,9 @@ RULES: list[Rule] = [
         ),
         0.6,
         requires=re.compile(r"menuiserie|fenêtre|porte|châssis|ensemble vitré|ouvrant", _I),
-        excludes=re.compile(r"volet|lame|poignée|renfort|coffre|grille", _I),
+        excludes=re.compile(
+            rf"volet|lame|poignée|renfort|coffre|grille|{_STANDARD_TITLE.pattern}", _I
+        ),
         normalize=_material,
     ),
     Rule(  # "Bois massif", "bois lamellé-collé": wood named by its kind, even near "lame"
@@ -181,7 +300,7 @@ RULES: list[Rule] = [
     Rule(
         F.OPENING_TYPE,
         re.compile(
-            r"\b(?:oscillo[- ]?battants?|(?:ouvrants?|ouvertures?)\s+à\s+la\s+française|à\s+la\s+française|basculant(?:e|s|es)?|projetant(?:e|s|es)?|coulissants?(?:\s+à\s+galandage)?|galandage|levant[- ]coulissant|châssis\s+fixes?|portes?-fenêtres?|portes?\s+d'entrée|soufflets?)\b",
+            r"\b(?:oscillo[- ]?battant(?:e|s|es)?|(?:ouvrants?|ouvertures?)\s+à\s+la\s+française|à\s+la\s+française|basculant(?:e|s|es)?|projetant(?:e|s|es)?|coulissant(?:e|s|es)?(?:\s+à\s+galandage)?|galandage|levant[- ]coulissant|châssis\s+fixes?|portes?\s+d'entrée|portes?\s+battantes?\s+motorisées?|soufflets?)\b",
             _I,
         ),
         0.7,
@@ -190,12 +309,13 @@ RULES: list[Rule] = [
             r"\b(?:NF\s+)?(?:DTU|EN)\s?\d|\bdépose|\banciens?\b|\banciennes?\b", _I
         ),
     ),
-    Rule(
+    Rule(  # "type … ou équivalent" names a profile only when the subject is a profile/window
         F.PROFILE_SYSTEM,
         re.compile(
             r"\b(?:type|gamme|profilés?)\s+[^.;\n]{2,60}?ou\s+(?:techniquement\s+)?équivalent", _I
         ),
         0.65,
+        excludes=_PRODUCT_NOT_PROFILE,
     ),
     Rule(
         F.PROFILE_SYSTEM,
@@ -205,49 +325,169 @@ RULES: list[Rule] = [
         ),
         0.65,
     ),
+    Rule(  # a range listed by name and depth: "- XYZLINE 65 EVO pour les châssis ouvrants"
+        F.PROFILE_SYSTEM,
+        re.compile(r"\b[A-Z]{4,}\s\d{2,3}(?:\s[A-Z]{2,4})?\b(?=\s+(?:à|pour)\b)"),
+        0.6,
+        requires=re.compile(r"châssis|murs?\s+rideaux?|portes?|ouvrants?|fenêtres?", _I),
+    ),
+    Rule(
+        F.PROFILE_SYSTEM,
+        re.compile(r"\b(?:à\s+)?rupture\s+de\s+pont\s+thermique\b", _I),
+        0.65,
+        requires=re.compile(r"profil", _I),  # a property of the profiles themselves
+    ),
     Rule(
         F.FINISH,
         re.compile(
-            r"\bteinté\s+dans\s+la\s+masse\b|\bvernis\b[^.;,\n]{0,25}|\b(?:thermolaquage|laquage|anodisation|plaxage|lasure)\b(?:[^.;,\n]{0,40}?(?:Qualicoat|Qualimarine|Qualanod))?|\b(?:label\s+)?(?:Qualicoat|Qualimarine|Qualanod)\b",
+            r"\bteint[ée]e?s?\s+dans\s+la\s+masse\b|\b(?:thermolaqu\w*|laquage|anodisation|plaxage|lasure)\b(?:[^.;,\n]{0,40}?(?:Qualicoat|Qualimarine|Qualanod))?|\b(?:label\s+)?(?:Qualicoat|Qualimarine|Qualanod)\b",
             _I,
         ),
         0.75,
+        # the finish of a shutter's guides or of a handle is not the joinery's finish
+        excludes=re.compile(
+            r"coulisses?|volets?|\blames?\b|tabliers?|coffres?|bavettes?|poignées?|quincaillerie|"
+            r"paumelles?|fiches?|garnitures?",
+            _I,
+        ),
+        normalize=_finish,
+    ),
+    Rule(  # "PVC plaxé", "plaxés ou laqués bi-couleur": the profiles' own finish
+        F.FINISH,
+        re.compile(r"\bplax[ée]e?s?\b|\blaqu[ée]e?s?\b|\bbi-?\s?couleurs?\b|\bbicolores?\b", _I),
+        0.65,
+        requires=re.compile(r"PVC|menuiseries?|profil|châssis|ouvrants?|dormants?|fenêtres?", _I),
+        excludes=re.compile(
+            r"\blames?\b|volets?|coffres?|tabliers?|quincaillerie|poignées?|bavettes?|visserie|"
+            r"coulisses?|accessoires?|articles?|paumelles?|fiches?|garnitures?",
+            _I,
+        ),
+    ),
+    Rule(  # a varnish is a finish only when it is applied to the joinery, not a site protection
+        F.FINISH,
+        re.compile(r"\bvernis\b[^.;,\n]{0,25}", _I),
+        0.6,
+        excludes=re.compile(r"protection|adhési|film|connexes|peinture|ou\s+autres", _I),
     ),
     Rule(
         F.SECURITY_CLASS, re.compile(r"\b(?:RC|CR)\s?[1-6]N?\b(?:\s+selon\s+NF\s+EN\s+1627)?"), 0.85
     ),
+    Rule(  # VEMCROS class string and A2P locks
+        F.SECURITY_CLASS,
+        re.compile(
+            r"\bV\s?\*\s?\d\s+E\s?\*\s?\d\s+M\s?\*\s?\d\s+C\s?R?O\s?S\s?\*\s?\d\b|\bA\s?2\s?P\b"
+        ),
+        0.8,
+    ),
     Rule(
         F.HARDWARE,
         re.compile(
-            r"\b(?:crémone[^.;,\n]{0,45}|paumelles?[^.;,\n]{0,30}|ferme-porte[^.;,\n]{0,40}|poignées?[^.;,\n]{0,40}|renvois?\s+d'angle[^.;,\n]{0,30}|barres?\s+de\s+man(?:œ|oe)uvre[^.;,\n]{0,30}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy)\b[^.;,\n]{0,30})",
+            r"\b(?:crémone[^.;,\n]{0,45}|paumelles?[^.;,\n]{0,30}|ferme-porte[^.;,\n]{0,40}|poignées?[^.;,\n]{0,40}|renvois?\s+d'angle[^.;,\n]{0,30}|barres?\s+de\s+man(?:œ|oe)uvre[^.;,\n]{0,30}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{0,30})",
+            _I,
+        ),
+        0.6,
+    ),
+    Rule(  # further hardware named in a fitting list
+        F.HARDWARE,
+        re.compile(
+            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|compas(?:\s+limiteurs?)?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette)\b",
+            _I,
+        ),
+        0.6,
+        # a part the contractor must not supply is no requirement ("pas d'option serrures")
+        excludes=re.compile(
+            r"\bvolets?\s+roulants?\b|\bpas\s+d'option|\bhors\s+lot\b|options?\s+(?:sont\s+)?disponibles",
+            _I,
+        ),
+    ),
+    Rule(  # quality mark of hinges and locks
+        F.HARDWARE,
+        re.compile(r"\b(?:NF\s*-\s*)?S\.?N\.?F\.?Q\.?(?:\s*-?\s*1)?\b"),
+        0.6,
+    ),
+    Rule(
+        F.HARDWARE,
+        re.compile(_TYPE_X, _I),
+        0.6,
+        requires=_HARDWARE_SUBJECT,
+        excludes=re.compile(rf"{_GLASS_SUBJECT.pattern}|{_SHUTTER_SUBJECT.pattern}", _I),
+    ),
+    Rule(
+        F.SHUTTERS,
+        re.compile(
+            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))[^.;\n]{0,40}",
+            _I,
+        ),
+        0.65,
+        excludes=re.compile(r"\b(?:Sw|Uw|Ug|TLw)\b", _I),  # a performance line, not a shutter spec
+    ),
+    Rule(  # decorative or fixed shutters, motors, anti-lift locks, named makers
+        F.SHUTTERS,
+        re.compile(
+            r"\bvolets?\s+(?:décoratifs|fixes|bois)(?:\s+(?:fixes|décoratifs))?\b|\bmoteurs?\s+tubulaires?\b|\bmoteurs?\s+(?:de\s+chez\s+)?(?-i:[A-Z]{4,})\b|\banti-?\s?soul[èe]vement\b|\b(?:Griesser|Somfy|Simu|Bubendorff|Profalux)\b",
             _I,
         ),
         0.6,
     ),
     Rule(
         F.SHUTTERS,
+        re.compile(_TYPE_X, _I),
+        0.6,
+        requires=_SHUTTER_SUBJECT,
+        excludes=re.compile(rf"{_HARDWARE_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
+    ),
+    Rule(  # where the inlets go: "entrées d'air … dans les coffres de volets roulants"
+        F.AIR_INLETS,
         re.compile(
-            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))[^.;\n]{0,40}",
+            r"\bentr[ée]es?\s+d'air[^.;\n]{0,60}?\b(?:dans|sur|en)\s+(?:les?\s+|la\s+)?(?:coffres?[^.;,\n]{0,30}|traverses?\s+hautes?|façades?\s+maçonnées?|imposte)",
+            _I,
+        ),
+        0.7,
+    ),
+    Rule(  # a location item under an air-inlet article: "- dans les coffres de VR des pièces sèches"
+        F.AIR_INLETS,
+        re.compile(
+            r"\b(?:dans|sur)\s+les?\s+(?:coffres?\s+de\s+(?:VR|volets?\s+roulants?)|traverses?\s+(?:hautes?|supérieures?))\b",
             _I,
         ),
         0.65,
-        excludes=re.compile(r"\b(?:Sw|Uw|Ug|TLw)\b", _I),  # a performance line, not a shutter spec
+        context_requires=re.compile(r"entr[ée]es?\s+d'air|grilles?\s+d'entr|bouches?\s+d'", _I),
     ),
-    Rule(F.AIR_INLETS, re.compile(r"\bentrées?\s+d'air[^.;\n]{0,110}", _I), 0.7),
+    Rule(  # acoustic rating of the inlet: "Entrées d'air dans châssis Dn,e,w + Ctr ≥ 39 dB"
+        F.AIR_INLETS,
+        re.compile(rf"\bDn\s*,\s*e\s*,\s*w\s*\+?\s*C\s*tr\s*(?:[≥=:]\s*)?(\d{{2}}){DB}", _I),
+        0.7,
+        context_requires=re.compile(r"entr[ée]es?\s+d'air|grilles?|bouches?", _I),
+        before_excludes=_BOX_DB,
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # "entrée d'air hygro-régulée à affaiblissement acoustique -37dB minimum"
+        F.AIR_INLETS,
+        re.compile(rf"\bentr[ée]es?\s+d'air\b[^.;\n]{{0,70}}?(\d{{2}}){DB}", _I),
+        0.7,
+        excludes=re.compile(r"coffres?|\bEA\b", _I),
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # a maker named for the inlets
+        F.AIR_INLETS,
+        re.compile(r"\b(?:Aldes|Aldès|Anjos|Renson)\b", _I),
+        0.65,
+        requires=re.compile(r"\bair\b|ventilation|VMC|mortais|grilles?|bouches?", _I),
+    ),
     Rule(
         F.AIR_INLETS,
         re.compile(
-            r"\b(?:Aldes|Aldès|Anjos|Renson)\b[^.;\n]{0,50}|\bclapets?\s+de\s+ventilation\b[^.;,\n]{0,30}|\b(?:auto|hygro)réglables?\b[^.;\n]{0,40}",
+            r"\bclapets?\s+de\s+ventilation\b[^.;,\n]{0,30}|\b(?:auto|hygro)\s*-?\s*r[ée]g(?:l|ul)(?:ables?|ée?s?)\b(?:\s+type\s+[AB]\b)?",
             _I,
         ),
         0.65,
-        requires=re.compile(r"\bair\b|ventilation|VMC|mortais", _I),
+        requires=re.compile(r"\bair\b|ventilation|VMC|mortais|grilles?|bouches?", _I),
     ),
     Rule(
         F.ACCESSIBILITY,
         re.compile(
             r"\bPMR\b[^.;\n]{0,60}|\bseuil[^.;,\n]{0,60}|\beffort de man(?:œ|oe)uvre[^.;,\n]{0,40}"
-            r"|\b(?:hauteur|poignées?|organes?\s+de\s+man(?:œ|oe)uvre|commandes?)\b[^.;\n]{0,50}?\b[01][.,]\d{2}\s*m\b",
+            r"|\b(?:hauteur|poignées?|organes?\s+de\s+man(?:œ|oe)uvre|commandes?|man(?:œ|oe)uvres?)\b[^.;\n]{0,50}?\b[01][.,]\d{2}\s*m\b",
             _I,
         ),
         0.65,
@@ -255,34 +495,90 @@ RULES: list[Rule] = [
             r"\b(?:NF\s+)?EN\s?\d{4,5}\b", _I
         ),  # a standard's title, not a requirement
     ),
+    Rule(  # clear passage for wheelchair users: "ouverture ≥ 80 cm"
+        F.ACCESSIBILITY,
+        re.compile(
+            r"\b(?:ouverture|passage(?:\s+libre)?|largeur)\s*(?:de\s+|≥\s*|d'au\s+moins\s+|minimale?\s+de\s+)?\d{2,3}\s*cm\b",
+            _I,
+        ),
+        0.65,
+        context_requires=re.compile(r"accès|handicap|PMR|passage|seuil", _I),
+    ),
     Rule(
         F.INSTALLATION,
         re.compile(
-            r"\bpos(?:e|ée?s?)\s+en\s+(?:applique|tunnel|feuillure|rénovation)[^.;,\n]{0,40}|\bdépose\s+(?:des?\s+)?(?:menuiseries|châssis|fenêtres|ouvrages)\s+existant(?:e?s)?\b|\bdépose\s+(?:du\s+ou\s+des|des?|du)\s+(?:vantaux|ouvrants?|dormants?)\b|\b(?:menuiseries?|fenêtres?|châssis)\s+(?:PVC\s+|aluminium\s+|bois\s+)?de\s+rénovation\b|\bdépose\s+totale\b|\bsur\s+dormant\s+existant\b|\bcalfeutrement[^.;\n]{0,70}",
+            r"\bpos(?:e|ée?s?)\s+en\s+(?:applique|tunnel|feuillure|rénovation)[^.;,\n]{0,40}|\bdépose\s+(?:des?\s+)?(?:menuiseries|châssis|fenêtres|ouvrages)\s+existant(?:e?s)?\b|\bdépose\s+(?:du\s+ou\s+des|des?|du)\s+(?:vantaux|ouvrants?|dormants?)\b|\b(?:menuiseries?|fenêtres?|châssis)\s+(?:PVC\s+|aluminium\s+|bois\s+)?de\s+rénovation\b|\bdépose\s+totale\b|\bsur\s+dormant\s+existant\b",
             _I,
         ),
         0.75,
+        # a standard's title in a reference list: "DTU 37.2 : … en rénovation sur dormant existant"
+        excludes=re.compile(r"\bD\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?\s*[:/–]", _I),
+    ),
+    Rule(  # short, typed installation details; no free-text caulking sentences
+        F.INSTALLATION,
+        re.compile(
+            r"\bpos(?:e|ée?s?)\s+sur\s+(?:équerres?|cornières?|rejingots?|précadres?)\b|\btapées?(?:\s+(?:d'isolation|intégrées|rapportées|de\s+doublage|de\s+rattrapage))?\b|\bcompriband\b|\bappui\s+déporté\b|\bILLMOD(?:\s+(?-i:[A-Z0-9][A-Z0-9]+))?\b",
+            _I,
+        ),
+        0.65,
     ),
     Rule(
         F.STANDARDS,
         re.compile(
-            r"\bNF\s+(?:DTU|EN(?:\s+ISO)?|P)\s?\d+(?:[.\-]\d+)*\b|\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
+            r"\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
             _I,
         ),
         0.9,
+        in_heading=True,
+    ),
+    Rule(  # AFNOR: "NF DTU 36.5", "NF EN 14351-1", "NF.P 08.322", "N.F. P 26 102", "NFP 01-010"
+        F.STANDARDS,
+        re.compile(
+            r"\b(?:NF|N\.\s?F\.)\s*\.?\s*(?:D\.?\s?T\.?\s?U\.?|EN(?:\s+ISO)?|[PBASTEX])\s*\.?\s?\d{1,5}(?:\s?[.\-]\s?\d{1,4}|\s\d{3}\b)*(?:\s+P\d-\d)?\b"
+        ),
+        0.9,
+        in_heading=True,
+    ),
+    Rule(  # bare European numbers in a standards context: "conforme à la norme EN 1125"
+        F.STANDARDS,
+        re.compile(r"(?<![\w.])(?<!NF )(?<!ISO )EN\s?\d{3,5}(?:-\d+)*\b"),
+        0.8,
+        requires=re.compile(r"normes?|conformes?|essais?|classification|selon", _I),
+        in_heading=True,
+    ),
+    Rule(  # snow and wind rules
+        F.STANDARDS,
+        re.compile(r"\bN\.?\s?V\.?\s?65\b|\b(?<!R)N\s?84\b"),
+        0.8,
+        in_heading=True,
     ),
     Rule(
         F.CERTIFICATIONS,
         re.compile(
-            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|marque\s+NF|PEFC|FSC|CEBTP|NF\s+Fermetures|CSTBat|FDES|certification\s+QB)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
+            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|marque\s+NF|PEFC|FSC|CEBTP|NF\s+Fermetures?|CSTBat|FDES|certification\s+QB|C\.?E\.?R\.?F\.?F|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
             _I,
         ),
         0.85,
     ),
+    Rule(  # fire reaction class under a fire heading: "Les menuiseries PVC sont M1 ou M2"
+        F.CERTIFICATIONS,
+        re.compile(r"\bM[0-4]\b"),
+        0.7,
+        context_requires=re.compile(r"\bfeu\b|incendie", _I),
+    ),
     Rule(
         F.REGULATION,
         re.compile(
-            r"\barrêté\s+du\s+\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4}\b|\b(?:RE\s?2020|RT\s?2012|RT\s+existant|réglementation\s+(?:incendie|parasismique|thermique)|\bERP\b)",
+            r"\b(arrêtés?|circulaires?|ordonnances?)\b[^.;\n]{0,70}?\bdu\s+(\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4})\b",
+            _I,
+        ),
+        0.85,
+        normalize=_date_text,
+    ),
+    Rule(
+        F.REGULATION,
+        re.compile(
+            r"\b(?:RE\s?2020|RT\s?2012|RT\s+existant|réglementation\s+(?:incendie|parasismique|thermique)(?:\s+20\d\d)?|\bERP\b)",
             _I,
         ),
         0.85,
@@ -308,6 +604,7 @@ _ONE_PER_ARTICLE = frozenset(
         F.PROFILE_SYSTEM,
         F.GLAZING_TYPE,
         F.SPACER,
+        F.OPENING_TYPE,
     }
 )
 
@@ -342,14 +639,25 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
         body = chunk.text
         # The heading line is context, not a requirement ("4.1 Volets roulants").
         skip = len(chunk.heading) if chunk.heading and body.startswith(chunk.heading) else 0
+        headings = " > ".join(chunk.section_path)
         for rule in RULES:
+            if rule.heading_excludes is not None and rule.heading_excludes.search(headings):
+                continue
             for match in rule.pattern.finditer(body):
-                if match.start() < skip:
+                if match.start() < skip and not rule.in_heading:
                     continue
                 sentence = _sentence_around(body, match.start())
                 if rule.requires is not None and not rule.requires.search(sentence):
                     continue
                 if rule.excludes is not None and rule.excludes.search(sentence):
+                    continue
+                if rule.context_requires is not None and not rule.context_requires.search(
+                    f"{sentence} {headings}"
+                ):
+                    continue
+                if rule.before_excludes is not None and rule.before_excludes.search(
+                    body[max(0, match.start() - _BEFORE) : match.start()]
+                ):
                     continue
                 raw = " ".join(match.group(0).split()).rstrip(" ,;:")
                 value = rule.normalize(match) if rule.normalize else raw
