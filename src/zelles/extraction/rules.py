@@ -45,6 +45,10 @@ class Rule:
     # the section headings must not match this (coffre ranges are not facade values)
     heading_excludes: re.Pattern[str] | None = None
     in_heading: bool = False  # also match inside the heading line (standards listed as items)
+    # the few words just before the match must match this (the item being rated)
+    before_requires: re.Pattern[str] | None = None
+    # the section headings must match this ("Volets roulants" > "Dne,w + Ctr = 45 dB")
+    heading_requires: re.Pattern[str] | None = None
 
 
 _BEFORE = 80  # characters looked at by ``before_excludes``
@@ -76,6 +80,12 @@ _NOT_FACADE_DB = re.compile(
 # Same for an air inlet's own rating: not when a shutter box is the item being rated.
 _BOX_DB = re.compile(
     r"(?:coffres?|\bEA\b|volets?\s+roulants?)(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$", _I
+)
+# Shutter-box sound rating: "Coffres … Dn,e,w + Ctr ≥ 48 dB", "Dne,w,Ctr = 45 dB".
+DNEW = r"\bDn\s*,?\s*e\s*,?\s*w\s*[,+]?\s*\+?\s*C\s*tr\b"
+_BOX_HEADING = re.compile(r"coffres?|volets?\s+roulants?", _I)
+_INLET_ITEM = re.compile(
+    r"(?:entr[ée]es?\s+d'air|grilles?|bouches?)(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$", _I
 )
 # A material named in a standard's title ("DTU 36.1 / Menuiseries en bois") is no requirement.
 _STANDARD_TITLE = re.compile(r"\b(?:NF\s+)?DTU\b|D\.T\.U|\bNF\s?[A-Z]?\s?\d|\bnormes?\b", _I)
@@ -182,6 +192,30 @@ RULES: list[Rule] = [
         requires=re.compile(r"Ra\s*,\s*tr|acoustique|affaiblissement|DnT|isolement", _I),
         before_excludes=_NOT_FACADE_DB,
         heading_excludes=re.compile(r"coffres?|volets?|entr[ée]es?\s+d'air|grilles?", _I),
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # a shutter box rated in a list of items: "Coffres de VR … Dn,e,w + Ctr ≥ 48 dB"
+        F.ACOUSTIC,
+        re.compile(rf"{DNEW}\s*(?:[≥=:]\s*)?(\d{{2}}){DB}", _I),
+        0.75,
+        before_requires=_BOX_DB,
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # ...or under a shutter heading: "Volets roulants" > "Dne,w,Ctr = 45 dB"
+        F.ACOUSTIC,
+        re.compile(rf"{DNEW}\s*(?:[≥=:]\s*)?(\d{{2}})(?:\s*(?:à|-)\s*\d{{2}})?{DB}", _I),
+        0.75,
+        heading_requires=_BOX_HEADING,
+        before_excludes=_INLET_ITEM,
+        normalize=lambda m: f"{m.group(1)} dB",
+    ),
+    Rule(  # the upper end of a box range: "Dn,e,w + Ctr ≥ 47 à 42 dB"
+        F.ACOUSTIC,
+        re.compile(rf"(?<=\d)\s*à\s*(\d{{2}}){DB}", _I),
+        0.7,
+        requires=re.compile(DNEW, _I),
+        heading_requires=_BOX_HEADING,
+        before_excludes=_INLET_ITEM,
         normalize=lambda m: f"{m.group(1)} dB",
     ),
     Rule(
@@ -400,8 +434,8 @@ RULES: list[Rule] = [
             _I,
         ),
     ),
-    Rule(  # quality mark of hinges and locks
-        F.HARDWARE,
+    Rule(  # quality mark of hinges and locks, a certification like NF Fermetures
+        F.CERTIFICATIONS,
         re.compile(r"\b(?:NF\s*-\s*)?S\.?N\.?F\.?Q\.?(?:\s*-?\s*1)?\b"),
         0.6,
     ),
@@ -569,7 +603,7 @@ RULES: list[Rule] = [
     Rule(
         F.REGULATION,
         re.compile(
-            r"\b(arrêtés?|circulaires?|ordonnances?)\b[^.;\n]{0,70}?\bdu\s+(\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4})\b",
+            r"\b(arrêtés?|décrets?|circulaires?|ordonnances?)\b[^.;\n]{0,70}?\bdu\s+(\d{1,2}(?:er)?\s+[a-zéû]+\s+\d{4})\b",
             _I,
         ),
         0.85,
@@ -643,6 +677,8 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
         for rule in RULES:
             if rule.heading_excludes is not None and rule.heading_excludes.search(headings):
                 continue
+            if rule.heading_requires is not None and not rule.heading_requires.search(headings):
+                continue
             for match in rule.pattern.finditer(body):
                 if match.start() < skip and not rule.in_heading:
                     continue
@@ -655,9 +691,10 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     f"{sentence} {headings}"
                 ):
                     continue
-                if rule.before_excludes is not None and rule.before_excludes.search(
-                    body[max(0, match.start() - _BEFORE) : match.start()]
-                ):
+                before = body[max(0, match.start() - _BEFORE) : match.start()]
+                if rule.before_excludes is not None and rule.before_excludes.search(before):
+                    continue
+                if rule.before_requires is not None and not rule.before_requires.search(before):
                     continue
                 raw = " ".join(match.group(0).split()).rstrip(" ,;:")
                 value = rule.normalize(match) if rule.normalize else raw

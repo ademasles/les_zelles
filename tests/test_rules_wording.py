@@ -91,8 +91,18 @@ def test_facade_db_kept_apart_from_box_and_inlet_db() -> None:
         "Coffres de volets roulants sans EA Dn,e,w + Ctr ≥ 48 dB "
         "Entrées d'air dans châssis Dn,e,w + Ctr ≥ 39 dB"
     )
-    assert _numbers(reqs, F.ACOUSTIC) == {30, 35, 38}
+    # facade values plus the shutter box's own Dn,e,w; never the inlet's 39 dB
+    assert _numbers(reqs, F.ACOUSTIC) == {30, 35, 38, 48}
     assert "39 dB" in _values(reqs, F.AIR_INLETS)
+
+
+def test_shutter_box_rating_under_a_shutter_heading() -> None:
+    reqs = _extract(
+        "Performance acoustique\n\nDne,w,Ctr = 45 dB\n\n"
+        "Coffres : Dn,e,w + Ctr ≥ 47 à 42 dB suivant façades (sans entrée d'air)",
+        heading="2.3 Volets roulants",
+    )
+    assert _numbers(reqs, F.ACOUSTIC) == {45, 47, 42}
 
 
 def test_finishes_and_named_colours() -> None:
