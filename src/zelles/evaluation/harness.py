@@ -10,6 +10,7 @@ Precision counts every predicted requirement; recall every expected one.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -64,9 +65,28 @@ def matches(pred: Requirement, exp: Expected) -> bool:
     return want in have
 
 
+_ACRONYM = re.compile(r"\b((?:[a-z]\.)+[a-z])\b\.?")  # "d.t.u." / "s.n.j.f" -> "dtu" / "snjf"
+_NF_PREFIX = re.compile(r"\bnf\s*\.\s*(?=[a-z])|\bnf(?=[abepsx]\s*\d)")  # "nf.p", "nfp 20"
+_NUMERO = re.compile(r"\bn\s*[°º]\s*")  # "n°39", "n° 39"
+_FIRST = re.compile(r"\b1er\b")  # "1er août" = "1 août"
+_DIGIT_SEP = re.compile(r"(?<=\d)(?:\s*[.\-]\s*|,|\s+)(?=\d)")  # "20.501" = "20-501" = "20 501"
+
+
 def _comparable(text: str) -> str:
-    """Fold accents and case; hyphens and stars as spaces ("warm-edge" = "warm edge")."""
-    return " ".join(fold(text).replace("*", " * ").replace("-", " ").split())
+    """Normalise wording variants that do not change the requirement.
+
+    Accents and case are folded, hyphens and stars become spaces ("warm-edge" =
+    "warm edge"), dotted acronyms and "n°" are dropped ("D.T.U. n°39" = "DTU 39"),
+    "1er" is "1", and digit groups compare equal whatever the separator
+    ("NF P 20-501" contains "20.501").
+    """
+    text = fold(text)
+    text = _ACRONYM.sub(lambda m: m.group(1).replace(".", "") + " ", text)
+    text = _NF_PREFIX.sub("nf ", text)
+    text = _NUMERO.sub("", text)
+    text = _FIRST.sub("1", text)
+    text = " ".join(text.replace("*", " * ").replace("-", " ").split())
+    return _DIGIT_SEP.sub(".", text)
 
 
 def score(
