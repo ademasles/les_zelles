@@ -38,6 +38,8 @@ PRESETS: dict[str, tuple[str, str | None]] = {
     "openai-compatible": ("http://localhost:8000/v1", None),
 }
 
+LOCAL_PROVIDERS = frozenset({"ollama", "llamacpp", "vllm", "lmstudio", "openai-compatible"})
+
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 
@@ -82,6 +84,7 @@ class OpenAICompatibleLLM:
         key = api_key or (os.environ.get(env_key) if env_key else None)
         headers = {"Authorization": f"Bearer {key}"} if key else {}
         self._client = client or httpx.AsyncClient(timeout=timeout_s, headers=headers)
+        self.timeout_s = timeout_s
         self.max_retries = max_retries
         self.max_output_tokens = max_output_tokens
         self.price = price_for(provider, model, override=price)
@@ -90,12 +93,22 @@ class OpenAICompatibleLLM:
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    @property
+    def chat_url(self) -> str:
+        return f"{self.base_url}/chat/completions"
+
     async def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self.base_url}/chat/completions"
+        url = self.chat_url
         delay = 1.0
         for attempt in range(self.max_retries + 1):
             try:
                 response = await self._client.post(url, json=payload)
+            except (httpx.ReadTimeout, httpx.WriteTimeout) as exc:
+                # The server is up but too slow; resending the same prompt only repeats the wait.
+                raise LLMError(
+                    f"{self.name}: no reply within {self.timeout_s:.0f} s from {url}; "
+                    "raise ZELLES_LLM_TIMEOUT_S or use a faster model"
+                ) from exc
             except httpx.TransportError as exc:
                 if attempt == self.max_retries:
                     raise LLMError(f"{self.name}: cannot reach {url}: {exc}") from exc
@@ -126,26 +139,19 @@ class OpenAICompatibleLLM:
         started = time.perf_counter()
 
         for repair_round in range(2):
-            payload: dict[str, Any] = {
-                "model": self.model,
-                "messages": chat,
-                "max_tokens": max_tokens or self.max_output_tokens,
-                "temperature": 0,
-            }
-            if schema is not None:
-                payload["response_format"] = self._response_format(schema)
+            payload = self._payload(chat, schema, max_tokens or self.max_output_tokens)
             try:
                 data = await self._post(payload)
             except LLMError as exc:
                 if schema is not None and self._json_schema_supported and "HTTP 400" in str(exc):
                     log.info("%s rejected json_schema; falling back to JSON mode", self.name)
                     self._json_schema_supported = False
-                    payload["response_format"] = self._response_format(schema)
+                    payload = self._payload(chat, schema, max_tokens or self.max_output_tokens)
                     data = await self._post(payload)
                 else:
                     raise
             self._account(usage, data)
-            text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+            text = self._reply_text(data)
             if schema is None:
                 usage.seconds = time.perf_counter() - started
                 return Completion(text=text, parsed=None, usage=usage, model=self.name)
@@ -166,6 +172,22 @@ class OpenAICompatibleLLM:
             usage.seconds = time.perf_counter() - started
             return Completion(text=text, parsed=parsed, usage=usage, model=self.name)
         raise LLMError(f"{self.name}: no valid output")  # pragma: no cover
+
+    def _payload(
+        self, chat: list[dict[str, str]], schema: type[BaseModel] | None, max_tokens: int
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "messages": chat,
+            "max_tokens": max_tokens,
+            "temperature": 0,
+        }
+        if schema is not None:
+            payload["response_format"] = self._response_format(schema)
+        return payload
+
+    def _reply_text(self, data: dict[str, Any]) -> str:
+        return str((data.get("choices") or [{}])[0].get("message", {}).get("content") or "")
 
     def _response_format(self, schema: type[BaseModel]) -> dict[str, Any]:
         if self._json_schema_supported:

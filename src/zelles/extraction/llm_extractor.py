@@ -18,6 +18,7 @@ from zelles.domain.spec import (
     Usage,
 )
 from zelles.extraction.prompts import EXTRACTION_SYSTEM, extraction_task, format_passages
+from zelles.extraction.verify import mentions_field
 from zelles.llm.base import LLM, LLMError, Message
 from zelles.retrieval.index import DocumentIndex
 
@@ -45,6 +46,11 @@ FIELD_GROUPS: dict[str, list[SpecField]] = {
 # Below this size the whole document goes into the (cached) system prompt.
 WHOLE_DOCUMENT_CHARS = 24_000
 MAX_CONTEXT_CHARS = 14_000
+# For models with a known context window (local servers): French CCTP text runs
+# at about 3.2 characters per token; keep room for the answer and the task.
+CHARS_PER_TOKEN = 3
+OUTPUT_RESERVE_TOKENS = 2048
+TASK_RESERVE_CHARS = 3_000
 
 
 class ExtractedItem(BaseModel):
@@ -72,12 +78,20 @@ class LLMExtractor:
         self.llm = llm
         self.top_k = top_k
         self.semaphore = asyncio.Semaphore(max(1, concurrency))
+        self.whole_document_chars = WHOLE_DOCUMENT_CHARS
+        self.max_context_chars = MAX_CONTEXT_CHARS
+        context_tokens: int | None = getattr(llm, "context_tokens", None)
+        if context_tokens:
+            room = (context_tokens - OUTPUT_RESERVE_TOKENS) * CHARS_PER_TOKEN
+            room -= len(EXTRACTION_SYSTEM) + TASK_RESERVE_CHARS
+            self.whole_document_chars = min(WHOLE_DOCUMENT_CHARS, room)
+            self.max_context_chars = max(2_000, min(MAX_CONTEXT_CHARS, room))
 
     async def extract(
         self, index: DocumentIndex, candidates: list[Requirement]
     ) -> list[GroupOutcome]:
         total_chars = sum(len(c.text) for c in index.chunks)
-        whole = total_chars <= WHOLE_DOCUMENT_CHARS
+        whole = total_chars <= self.whole_document_chars
         system = EXTRACTION_SYSTEM
         if whole:  # identical prefix for every group: providers can cache it
             system += "\n\nSOURCE DOCUMENT\n\n" + format_passages(index.chunks)
@@ -118,6 +132,9 @@ class LLMExtractor:
         for item in parsed.items:
             if item.field not in allowed or not item.value.strip():
                 continue
+            if not mentions_field(SpecField(item.field), f"{item.quote} {item.scope or ''}"):
+                log.debug("dropped %s = %r: quote is about another topic", item.field, item.value)
+                continue
             requirements.append(
                 Requirement(
                     field=SpecField(item.field),
@@ -145,7 +162,7 @@ class LLMExtractor:
         out: list[Chunk] = []
         size = 0
         for chunk in ordered:
-            if size + len(chunk.text) > MAX_CONTEXT_CHARS and out:
+            if size + len(chunk.text) > self.max_context_chars and out:
                 break
             out.append(chunk)
             size += len(chunk.text)

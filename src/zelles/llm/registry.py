@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from zelles.config import Settings
 from zelles.llm.base import LLM, Embedder, LLMError
-from zelles.llm.openai_compat import PRESETS, OpenAICompatibleEmbedder, OpenAICompatibleLLM
+from zelles.llm.openai_compat import (
+    LOCAL_PROVIDERS,
+    PRESETS,
+    OpenAICompatibleEmbedder,
+    OpenAICompatibleLLM,
+)
 from zelles.llm.pricing import Price
 
 NONE_VALUES = frozenset({"", "none", "rules", "off"})
+LOCAL_TIMEOUT_S = 600.0
+CLOUD_TIMEOUT_S = 180.0
 
 
 def split_spec(spec: str) -> tuple[str, str]:
@@ -24,6 +31,9 @@ def create_llm(spec: str, settings: Settings) -> LLM | None:
         return None
     provider, model = split_spec(spec)
     api_key = settings.llm_api_key.get_secret_value() if settings.llm_api_key else None
+    timeout_s = settings.llm_timeout_s or (
+        LOCAL_TIMEOUT_S if provider in LOCAL_PROVIDERS else CLOUD_TIMEOUT_S
+    )
     price = None
     if (
         settings.llm_price_input_per_mtok is not None
@@ -36,7 +46,20 @@ def create_llm(spec: str, settings: Settings) -> LLM | None:
         return AnthropicLLM(
             model,
             api_key=api_key,
-            timeout_s=settings.llm_timeout_s,
+            timeout_s=timeout_s,
+            max_retries=settings.llm_max_retries,
+            max_output_tokens=settings.llm_max_output_tokens,
+            price=price,
+        )
+    if provider == "ollama":
+        from zelles.llm.ollama import OllamaLLM  # noqa: PLC0415
+
+        return OllamaLLM(
+            model,
+            num_ctx=settings.ollama_num_ctx,
+            think=settings.ollama_think,
+            base_url=settings.llm_base_url,
+            timeout_s=timeout_s,
             max_retries=settings.llm_max_retries,
             max_output_tokens=settings.llm_max_output_tokens,
             price=price,
@@ -49,7 +72,7 @@ def create_llm(spec: str, settings: Settings) -> LLM | None:
         model,
         base_url=settings.llm_base_url,
         api_key=api_key,
-        timeout_s=settings.llm_timeout_s,
+        timeout_s=timeout_s,
         max_retries=settings.llm_max_retries,
         max_output_tokens=settings.llm_max_output_tokens,
         price=price,

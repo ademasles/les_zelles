@@ -46,6 +46,13 @@ def merge_requirements(rules: list[Requirement], llm: list[Requirement]) -> list
             None,
         )
         if match is None:
+            if candidate.status != RequirementStatus.VERIFIED and any(
+                r.field == candidate.field
+                and r.status == RequirementStatus.VERIFIED
+                and _same_place(r, candidate)
+                for r in merged
+            ):
+                continue  # an ungrounded value that contradicts a grounded one
             if not any(m.dedupe_key() == candidate.dedupe_key() for m in merged):
                 merged.append(candidate)
             continue

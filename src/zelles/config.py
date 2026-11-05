@@ -44,12 +44,24 @@ class Settings(BaseSettings):
         default=None, description="Override the provider's base URL (OpenAI-compatible servers)."
     )
     llm_api_key: SecretStr | None = Field(default=None, description="API key for cloud providers.")
-    llm_timeout_s: float = 180.0
+    llm_timeout_s: float | None = Field(
+        default=None,
+        description="Seconds to wait for one LLM reply. Defaults to 600 for local servers, "
+        "180 for cloud APIs.",
+    )
     llm_max_retries: int = 2
     llm_concurrency: int = Field(
         default=2, description="Parallel LLM calls. Use 1 for a single local GPU."
     )
     llm_max_output_tokens: int = 4096
+    ollama_num_ctx: int = Field(
+        default=6144,
+        description="Context window requested from Ollama. Its own default is often 4096, "
+        "too small for CCTP passages.",
+    )
+    ollama_think: bool = Field(
+        default=False, description="Let Ollama thinking models reason before answering."
+    )
     llm_price_input_per_mtok: float | None = Field(
         default=None, description="USD per million input tokens, to override the built-in table."
     )
