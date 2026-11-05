@@ -137,6 +137,8 @@ def test_mentions_field_tolerates_plurals_and_accents() -> None:
     assert not mentions_field(SpecField.SHUTTERS, "Poignées en Zamak, système Winkhaus")
     assert not mentions_field(SpecField.FINISH, "largeur vue inférieure à 80 mm")
     assert not mentions_field(SpecField.SW, "Les ouvrants seront oscillo-battants")
+    assert not mentions_field(SpecField.PROFILE_SYSTEM, "système Winkhaus pour les fermetures")
+    assert mentions_field(SpecField.PROFILE_SYSTEM, "profilés de 60 mm à quatre chambres")
 
 
 def test_merge_drops_ungrounded_value_beside_grounded_one() -> None:

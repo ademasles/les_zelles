@@ -38,8 +38,11 @@ def _stem_pattern(term: str) -> re.Pattern[str]:
     return re.compile(r"\b" + r"\W*".join(parts))
 
 
+# Retrieval terms too generic to show what a quote is about ("système Winkhaus").
+_GENERIC_TERMS = frozenset({"type", "système", "ou techniquement équivalent"})
 _FIELD_TERMS = {
-    field: [_stem_pattern(t) for t in info.search_terms] for field, info in FIELD_CATALOG.items()
+    field: [_stem_pattern(t) for t in info.search_terms if t not in _GENERIC_TERMS]
+    for field, info in FIELD_CATALOG.items()
 }
 
 
