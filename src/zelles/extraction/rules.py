@@ -639,8 +639,55 @@ _ONE_PER_ARTICLE = frozenset(
         F.GLAZING_TYPE,
         F.SPACER,
         F.OPENING_TYPE,
+        F.SAFETY_GLAZING,
     }
 )
+
+# Descriptive fields are not read from a reference list item ("- NF P 78-303 Verre feuilleté",
+# "N.F. P 26 303 Crémone : caractéristiques") nor from a list of works outside the lot.
+_DESCRIPTIVE = frozenset(
+    {
+        F.HARDWARE,
+        F.SAFETY_GLAZING,
+        F.GLAZING_TYPE,
+        F.ACCESSIBILITY,
+        F.FINISH,
+        F.OPENING_TYPE,
+        F.FRAME_MATERIAL,
+        F.SHUTTERS,
+        F.INSTALLATION,
+    }
+)
+_REFERENCE_ITEM = re.compile(
+    r"^\W*(?:NF\b|N\.\s?F\.|EN\s?\d|ISO\s?\d|D\.?\s?T\.?\s?U\b|[PBA]\s?\d{2}[.\-]\d)"
+)
+_EXCLUSION_LEAD = re.compile(
+    r"\bne\s+(?:font|fait)\s+pas\s+partie\b|\bprestations?\s+exclues?\b|\bsont\s+exclus\b", _I
+)
+# The handle's position is an accessibility rule, not a hardware spec.
+_HANDLE_POSITION = re.compile(r"\bpositionn[ée]|\bréglementation|\bconformément", _I)
+
+
+_ACCESS_CONTEXT = re.compile(
+    r"\bPMR\b|handicap|accessib|mobilité\s+réduite|\d\s*cm\b|ressaut|plan\s+incliné", _I
+)
+
+
+def _excluded_spans(body: str) -> list[tuple[int, int]]:
+    """Lines listed after "Ne font pas partie du présent lot :" up to the next lead-in line."""
+    spans: list[tuple[int, int]] = []
+    for lead in _EXCLUSION_LEAD.finditer(body):
+        start = body.find("\n", lead.end())
+        if start < 0:
+            continue
+        end = start
+        for line in re.finditer(r"[^\n]*\n?", body[start + 1 :]):
+            text = line.group(0).strip()
+            if not text.startswith(("-", "•", "▪", "–", "o ")):  # the list ends with its items
+                break
+            end = start + 1 + line.end()
+        spans.append((start, end))
+    return spans
 
 
 def describes_existing(chunk: Chunk) -> bool:
@@ -663,6 +710,44 @@ def _sentence_around(text: str, pos: int) -> str:
     return text.strip()
 
 
+def _keep(
+    rule: Rule,
+    match: re.Match[str],
+    *,
+    body: str,
+    sentence: str,
+    headings: str,
+    outside_lot: list[tuple[int, int]],
+) -> bool:
+    """Apply a rule's context checks to one match."""
+    if rule.requires is not None and not rule.requires.search(sentence):
+        return False
+    if rule.excludes is not None and rule.excludes.search(sentence):
+        return False
+    if rule.context_requires is not None and not rule.context_requires.search(
+        f"{sentence} {headings}"
+    ):
+        return False
+    before = body[max(0, match.start() - _BEFORE) : match.start()]
+    if rule.before_excludes is not None and rule.before_excludes.search(before):
+        return False
+    if rule.before_requires is not None and not rule.before_requires.search(before):
+        return False
+    if rule.field in _DESCRIPTIVE and (
+        _REFERENCE_ITEM.search(sentence) or any(a <= match.start() < b for a, b in outside_lot)
+    ):
+        return False
+    word = match.group(0).lower()
+    if rule.field == F.HARDWARE and word.startswith("poign") and _HANDLE_POSITION.search(sentence):
+        return False  # the accessibility note on handle height, not a handle spec
+    # a threshold is an accessibility item only in a PMR context
+    return not (
+        rule.field == F.ACCESSIBILITY
+        and word.startswith("seuil")
+        and not _ACCESS_CONTEXT.search(f"{sentence} {headings}")
+    )
+
+
 def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     """Run every rule over every chunk and return cited requirements."""
     found: dict[tuple[str, str, str], Requirement] = {}
@@ -674,6 +759,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
         # The heading line is context, not a requirement ("4.1 Volets roulants").
         skip = len(chunk.heading) if chunk.heading and body.startswith(chunk.heading) else 0
         headings = " > ".join(chunk.section_path)
+        outside_lot = _excluded_spans(body)
         for rule in RULES:
             if rule.heading_excludes is not None and rule.heading_excludes.search(headings):
                 continue
@@ -683,18 +769,14 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                 if match.start() < skip and not rule.in_heading:
                     continue
                 sentence = _sentence_around(body, match.start())
-                if rule.requires is not None and not rule.requires.search(sentence):
-                    continue
-                if rule.excludes is not None and rule.excludes.search(sentence):
-                    continue
-                if rule.context_requires is not None and not rule.context_requires.search(
-                    f"{sentence} {headings}"
+                if not _keep(
+                    rule,
+                    match,
+                    body=body,
+                    sentence=sentence,
+                    headings=headings,
+                    outside_lot=outside_lot,
                 ):
-                    continue
-                before = body[max(0, match.start() - _BEFORE) : match.start()]
-                if rule.before_excludes is not None and rule.before_excludes.search(before):
-                    continue
-                if rule.before_requires is not None and not rule.before_requires.search(before):
                     continue
                 raw = " ".join(match.group(0).split()).rstrip(" ,;:")
                 value = rule.normalize(match) if rule.normalize else raw

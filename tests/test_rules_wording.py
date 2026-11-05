@@ -169,6 +169,24 @@ def test_fire_class_read_under_a_fire_heading() -> None:
     assert {"M1", "M2"} <= _values(reqs, F.CERTIFICATIONS)
 
 
+def test_precision_reference_lists_and_works_outside_the_lot() -> None:
+    reqs = _extract(
+        "- NF P 78-303 Verre feuilleté pour vitrage de bâtiment\n"
+        "- N.F. P 26 303 Crémone : caractéristiques et essais\n\n"
+        "Ne font pas partie du présent lot :\n"
+        "- l'exécution des seuils de portes-fenêtres et des appuis\n"
+        "- les serrures des portes palières\n\n"
+        "Conformément à la réglementation, les poignées seront placées entre 0,90 m et 1,30 m.\n\n"
+        "Poignée laquée blanc placée entre 0,90 m et 1,30 m du sol."
+    )
+    assert not _values(reqs, F.SAFETY_GLAZING)
+    hardware = " | ".join(_values(reqs, F.HARDWARE)).lower()
+    assert "crémone" not in hardware and "serrure" not in hardware
+    assert hardware.count("poign") == 1  # the handle spec, not the regulatory note
+    assert not any(v.lower().startswith("seuil") for v in _values(reqs, F.ACCESSIBILITY))
+    assert any("0,90 m" in v for v in _values(reqs, F.ACCESSIBILITY))
+
+
 def test_precision_no_free_text_catch_alls() -> None:
     reqs = _extract(
         "Les entrées d'air devront être prises en compte par l'entreprise.\n\n"
