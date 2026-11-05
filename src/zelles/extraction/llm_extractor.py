@@ -18,6 +18,7 @@ from zelles.domain.spec import (
     Usage,
 )
 from zelles.extraction.prompts import EXTRACTION_SYSTEM, extraction_task, format_passages
+from zelles.extraction.verify import mentions_field
 from zelles.llm.base import LLM, LLMError, Message
 from zelles.retrieval.index import DocumentIndex
 
@@ -130,6 +131,9 @@ class LLMExtractor:
         parsed = result.parsed or ExtractionResult()
         for item in parsed.items:
             if item.field not in allowed or not item.value.strip():
+                continue
+            if not mentions_field(SpecField(item.field), f"{item.quote} {item.scope or ''}"):
+                log.debug("dropped %s = %r: quote is about another topic", item.field, item.value)
                 continue
             requirements.append(
                 Requirement(

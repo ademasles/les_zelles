@@ -8,14 +8,56 @@ the quote. Failing values are kept but marked, never shown as verified.
 
 from __future__ import annotations
 
+import re
 from difflib import SequenceMatcher
 
 from zelles.domain.documents import Chunk
-from zelles.domain.spec import FIELD_CATALOG, Requirement, RequirementStatus
+from zelles.domain.spec import (
+    FIELD_CATALOG,
+    Requirement,
+    RequirementSource,
+    RequirementStatus,
+    SpecField,
+)
 from zelles.domain.validators import parse_number, validate
 from zelles.ingest.cleaning import normalize_for_match
 
 FUZZY_THRESHOLD = 0.88
+_CODE_TOKEN = re.compile(r"[\w*/.,+-]*\d[\w*/.,+-]*")
+
+
+def _alnum(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", normalize_for_match(text))
+
+
+def _stem_pattern(term: str) -> re.Pattern[str]:
+    words = normalize_for_match(term).split()
+    parts = [
+        re.escape(w) + r"\b" if len(w) <= 3 else re.escape(w[: max(4, len(w) - 2)]) for w in words
+    ]
+    return re.compile(r"\b" + r"\W*".join(parts))
+
+
+_FIELD_TERMS = {
+    field: [_stem_pattern(t) for t in info.search_terms] for field, info in FIELD_CATALOG.items()
+}
+
+
+def mentions_field(field: SpecField, text: str) -> bool:
+    """True when ``text`` uses some of the field's own vocabulary (accent and plural tolerant)."""
+    folded = normalize_for_match(text)
+    return any(p.search(folded) for p in _FIELD_TERMS[field])
+
+
+def value_codes_in_quote(value: str, quote: str) -> bool:
+    """Every token of the value that carries a digit (A*3, RAL 9010, 4/16/4) is in the quote.
+
+    Tokens are compared whole, so A*2 does not match inside V*A2; a token may span up
+    to three quote words ("RAL9010" against "RAL 9010").
+    """
+    words = [w for w in (_alnum(w) for w in normalize_for_match(quote).split()) if w]
+    spans = {"".join(words[i : i + n]) for n in (1, 2, 3) for i in range(len(words))}
+    return all(_alnum(t) in spans for t in _CODE_TOKEN.findall(value) if _alnum(t))
 
 
 def locate_quote(quote: str, text: str) -> float:
@@ -91,6 +133,14 @@ def verify_requirement(req: Requirement, chunks: dict[str, Chunk]) -> Requiremen
         status = RequirementStatus.INVALID
         confidence = min(confidence, 0.3)
         notes.append(check.message or "value failed validation")
+    elif (
+        req.source == RequirementSource.LLM
+        and not FIELD_CATALOG[req.field].numeric
+        and not value_codes_in_quote(req.value, citation.quote)
+    ):
+        status = RequirementStatus.UNVERIFIED
+        confidence = min(confidence, 0.35)
+        notes.append("the value is not in the quoted text")
     elif FIELD_CATALOG[req.field].numeric and req.numeric_value is not None:
         quoted = parse_numbers(citation.quote)
         if not any(
