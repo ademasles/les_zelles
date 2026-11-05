@@ -1,8 +1,12 @@
-## What
+## Summary
+
+<!-- What changes, in two to five bullets. -->
 
 ## Why
 
-## How it was tested
+<!-- The problem, and for rules, prompts or verification the eval before and after. -->
 
-- [ ] `make check` passes (ruff, mypy, pytest)
+## Testing
+
+- [ ] `make check` passes (ruff, mypy, pytest, eval gate)
 - [ ] `zelles eval` F1 did not drop
