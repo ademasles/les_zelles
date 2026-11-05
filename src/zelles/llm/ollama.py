@@ -20,7 +20,7 @@ from zelles.llm.pricing import cost_usd
 
 class OllamaLLM(OpenAICompatibleLLM):
     def __init__(
-        self, model: str, *, num_ctx: int = 8192, think: bool = False, **kwargs: Any
+        self, model: str, *, num_ctx: int = 6144, think: bool = False, **kwargs: Any
     ) -> None:
         super().__init__("ollama", model, **kwargs)
         self.base_url = self.base_url.removesuffix("/v1")

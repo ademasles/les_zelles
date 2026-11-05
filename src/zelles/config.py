@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     )
     llm_max_output_tokens: int = 4096
     ollama_num_ctx: int = Field(
-        default=8192,
+        default=6144,
         description="Context window requested from Ollama. Its own default is often 4096, "
         "too small for CCTP passages.",
     )
