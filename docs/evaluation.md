@@ -26,6 +26,20 @@ A prediction matches an expected requirement when the field is the same and eith
 
 ## Current state
 
-There is one synthetic case (`residence_tilleuls`, a Lot 05 with PVC dwellings, an aluminium hall, shutters and air inlets). Rules alone score a micro F1 of 0.97 on it. This number is optimistic: the case was written alongside the rules.
+**Public case.** `evals/golden/residence_tilleuls` is a synthetic Lot 05 (PVC dwellings, an aluminium hall, shutters and air inlets). Rules alone score 1.00 on it. It was written alongside the rules, so it is a regression gate in CI (`--min-f1 0.9`), not a quality claim.
 
-The most useful next step is a real CCTP, anonymised, with its `expected.json`. Three to five real cases covering PVC, aluminium and wood, renovation and new build, are enough to make model comparisons meaningful.
+**Private set.** Nine real joinery CCTPs from public tenders (16 to 73 pages, Word exports with a text layer), each with a hand-checked answer key. The documents are confidential and are not in this repository; the keys live next to them. Six cases are used for development and three are held out: their scores are reported, but their misses are never read while tuning, so the held-out score estimates performance on a tender nobody has seen.
+
+| Configuration | Held-out micro F1 | Held-out precision | Dev micro F1 |
+|---|---|---|---|
+| Rules only, before tuning on the nine tenders | 0.648 | | 0.716 |
+| Rules only, current | **0.860** | **0.871** | 0.973 |
+| Rules + granite4.2 8B (Ollama, local) | 0.847 | about 4 pts lower | |
+
+The local model recovers a few requirements the rules miss but adds more false positives, so rules-only stays the default. Run `zelles eval -m <model>` on your own cases before switching.
+
+**Labelling choices.** Answer keys follow the estimator's reading where a value could go to two fields: shutter-box Dn,e,w ratings are acoustic requirements (apart from facade and air-inlet ratings), quality labels such as SNFQ are certifications, and a lacquered finish is a finish, not a colour.
+
+## Adding a case
+
+Three to five more real cases covering wood, renovation and curtain walls would make model comparisons sharper. A case can be shared publicly only once it is anonymised (no project, client or address).
