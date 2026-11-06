@@ -5,12 +5,20 @@ Layout: ``evals/golden/<case>/`` holds the source (``cctp.pdf|docx|md|txt``) and
 prediction matches an expectation when the field is the same and the value
 matches (numbers exactly, text by containment after accent folding).
 Precision counts every predicted requirement; recall every expected one.
+
+Two scores are reported. The lenient one also looks in the cited quote, which
+credits a correct line whose extracted value is garbled. The strict one looks
+at the extracted value only: it is what an estimator reads in the sheet.
+Micro F1 comes with a 95 % bootstrap interval over cases (tenders), so a
+change smaller than the interval is noise.
 """
 
 from __future__ import annotations
 
 import json
+import random
 import re
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -34,9 +42,15 @@ class CaseReport(BaseModel):
     predicted: int
     expected: int
     true_positives: int
+    correct_predictions: int
+    strict_true_positives: int
+    strict_correct_predictions: int
     precision: float
     recall: float
     f1: float
+    strict_precision: float
+    strict_recall: float
+    strict_f1: float
     grounded_rate: float
     cost_usd: float | None
     seconds: float
@@ -50,10 +64,19 @@ class EvalReport(BaseModel):
     precision: float
     recall: float
     f1: float
+    f1_ci: tuple[float, float]
+    strict_precision: float
+    strict_recall: float
+    strict_f1: float
+    strict_f1_ci: tuple[float, float]
     misses: list[str]
 
 
-def matches(pred: Requirement, exp: Expected) -> bool:
+def matches(pred: Requirement, exp: Expected, *, strict: bool = False) -> bool:
+    """Whether a prediction states the expected requirement.
+
+    ``strict`` looks at the extracted value only; otherwise the cited quote counts too.
+    """
     if pred.field != exp.field:
         return False
     if exp.numeric is not None:
@@ -61,8 +84,8 @@ def matches(pred: Requirement, exp: Expected) -> bool:
     if exp.value is None:
         return False
     want = _comparable(exp.value)
-    have = _comparable(pred.value + " " + (pred.citation.quote if pred.citation else ""))
-    return want in have
+    quote = "" if strict or pred.citation is None else " " + pred.citation.quote
+    return want in _comparable(pred.value + quote)
 
 
 _ACRONYM = re.compile(r"\b((?:[a-z]+\.)+[a-z]+)\b\.?")  # "d.t.u." / "cer.f.f" -> "dtu" / "cerff"
@@ -90,15 +113,49 @@ def _comparable(text: str) -> str:
 
 
 def score(
-    predicted: list[Requirement], expected: list[Expected]
+    predicted: list[Requirement], expected: list[Expected], *, strict: bool = False
 ) -> tuple[int, list[Expected], list[Requirement]]:
-    matched_exp = [e for e in expected if any(matches(p, e) for p in predicted)]
-    extras = [p for p in predicted if not any(matches(p, e) for e in expected)]
+    matched_exp = [e for e in expected if any(matches(p, e, strict=strict) for p in predicted)]
+    extras = [p for p in predicted if not any(matches(p, e, strict=strict) for e in expected)]
     return len(matched_exp), [e for e in expected if e not in matched_exp], extras
 
 
 def _f1(p: float, r: float) -> float:
     return 0.0 if p + r == 0 else 2 * p * r / (p + r)
+
+
+def _ratio(num: int, den: int) -> float:
+    return num / den if den else 0.0
+
+
+def micro_f1(cases: Sequence[CaseReport], *, strict: bool = False) -> tuple[float, float, float]:
+    """Micro precision, recall and F1 from summed counts."""
+    correct = sum(c.strict_correct_predictions if strict else c.correct_predictions for c in cases)
+    found = sum(c.strict_true_positives if strict else c.true_positives for c in cases)
+    precision = _ratio(correct, sum(c.predicted for c in cases))
+    recall = _ratio(found, sum(c.expected for c in cases))
+    return precision, recall, _f1(precision, recall)
+
+
+def bootstrap_f1(
+    cases: Sequence[CaseReport],
+    *,
+    strict: bool = False,
+    samples: int = 2000,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """95 % percentile interval of micro F1, resampling cases with replacement.
+
+    Cases, not requirements, are resampled: values within one tender are
+    correlated (same author, same template), so tenders are the unit of evidence.
+    """
+    if not cases:
+        return (0.0, 0.0)
+    rng = random.Random(seed)  # noqa: S311 - reproducible resampling, not security
+    scores = sorted(
+        micro_f1(rng.choices(cases, k=len(cases)), strict=strict)[2] for _ in range(samples)
+    )
+    return scores[int(0.025 * (samples - 1))], scores[int(0.975 * (samples - 1))]
 
 
 async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
@@ -107,7 +164,6 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
     llm = create_llm(settings.llm_model, settings)
     embedder = create_embedder(settings.embedding_model, settings)
     cases: list[CaseReport] = []
-    tp_all = pred_all = exp_all = 0
     all_misses: list[str] = []
     try:
         for case_dir in sorted(p for p in golden_dir.iterdir() if p.is_dir()):  # noqa: ASYNC240
@@ -128,10 +184,14 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
             )
             predicted = analysis.sheet.requirements
             tp, misses, extras = score(predicted, expected)
+            strict_tp, _, strict_extras = score(predicted, expected, strict=True)
             # precision: a prediction is correct if it matches any expectation
             correct_preds = len(predicted) - len(extras)
-            precision = correct_preds / len(predicted) if predicted else 0.0
-            recall = tp / len(expected) if expected else 0.0
+            strict_correct = len(predicted) - len(strict_extras)
+            precision = _ratio(correct_preds, len(predicted))
+            recall = _ratio(tp, len(expected))
+            strict_precision = _ratio(strict_correct, len(predicted))
+            strict_recall = _ratio(strict_tp, len(expected))
             grounded = (
                 sum(1 for p in predicted if p.status == "verified") / len(predicted)
                 if predicted
@@ -146,9 +206,15 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
                     predicted=len(predicted),
                     expected=len(expected),
                     true_positives=tp,
+                    correct_predictions=correct_preds,
+                    strict_true_positives=strict_tp,
+                    strict_correct_predictions=strict_correct,
                     precision=precision,
                     recall=recall,
                     f1=_f1(precision, recall),
+                    strict_precision=strict_precision,
+                    strict_recall=strict_recall,
+                    strict_f1=_f1(strict_precision, strict_recall),
                     grounded_rate=grounded,
                     cost_usd=analysis.sheet.usage.cost_usd,
                     seconds=analysis.timings.get("total", 0.0),
@@ -156,22 +222,24 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
                     extras=[f"{e.field.value} = {e.value}" for e in extras],
                 )
             )
-            tp_all += correct_preds
-            pred_all += len(predicted)
-            exp_all += len(expected)
             all_misses += miss_labels
     finally:
         if llm is not None:
             await llm.aclose()
         if embedder is not None:
             await embedder.aclose()
-    recall_all = sum(c.true_positives for c in cases) / exp_all if exp_all else 0.0
-    precision_all = tp_all / pred_all if pred_all else 0.0
+    precision_all, recall_all, f1_all = micro_f1(cases)
+    strict_p, strict_r, strict_f = micro_f1(cases, strict=True)
     return EvalReport(
         model=llm.name if llm else "rules",
         cases=cases,
         precision=precision_all,
         recall=recall_all,
-        f1=_f1(precision_all, recall_all),
+        f1=f1_all,
+        f1_ci=bootstrap_f1(cases),
+        strict_precision=strict_p,
+        strict_recall=strict_r,
+        strict_f1=strict_f,
+        strict_f1_ci=bootstrap_f1(cases, strict=True),
         misses=all_misses,
     )

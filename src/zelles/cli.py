@@ -241,7 +241,7 @@ def evaluate(
     settings = _settings(model, None)
     report = asyncio.run(run_eval(golden_dir, settings))
     table = Table(title=f"Evaluation · {report.model}")
-    for col in ("Case", "Precision", "Recall", "F1", "Grounded", "Cost"):
+    for col in ("Case", "Precision", "Recall", "F1", "Strict F1", "Grounded", "Cost"):
         table.add_column(col)
     for case in report.cases:
         cost = f"${case.cost_usd:.4f}" if case.cost_usd is not None else "n/a"
@@ -250,11 +250,24 @@ def evaluate(
             f"{case.precision:.2f}",
             f"{case.recall:.2f}",
             f"{case.f1:.2f}",
+            f"{case.strict_f1:.2f}",
             f"{case.grounded_rate:.0%}",
             cost,
         )
     console.print(table)
-    console.print(f"micro F1 {report.f1:.3f}")
+    for label, p, r, f, (lo, hi) in (
+        ("lenient", report.precision, report.recall, report.f1, report.f1_ci),
+        (
+            "strict",
+            report.strict_precision,
+            report.strict_recall,
+            report.strict_f1,
+            report.strict_f1_ci,
+        ),
+    ):
+        console.print(
+            f"micro F1 {label:<7} {f:.3f} (95% CI {lo:.3f}-{hi:.3f}) · P {p:.3f} · R {r:.3f}"
+        )
     for miss in report.misses[:30]:
         console.print(f"  [yellow]missed[/] {miss}")
     if report.f1 < min_f1:
