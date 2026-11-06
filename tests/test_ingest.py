@@ -142,3 +142,48 @@ def test_sample_cctp_gets_its_title(sample_bytes: bytes) -> None:
         "Construction de 24 logements collectifs - Résidence Les Tilleuls "
         "(document synthétique de test)"
     )
+
+
+def test_title_joins_capital_lines_and_drops_parties_and_address() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "MARCHÉ PUBLIC DE TRAVAUX",
+        "MAÎTRE D'OUVRAGE",
+        "COMMUNE D'EXEMPLEVILLE",
+        "RESTRUCTURATION DU GROUPE SCOLAIRE",
+        "JEAN MOULIN - BÂTIMENT B",
+        "12 rue des Lilas 91000 Exempleville",
+        "Architecte : Atelier X",
+        "CAHIER DES CLAUSES TECHNIQUES PARTICULIÈRES",
+    )
+    assert detect_title(doc) == "RESTRUCTURATION DU GROUPE SCOLAIRE JEAN MOULIN - BÂTIMENT B"
+
+
+def test_title_after_a_label_on_its_own_line() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "REMPLACEMENT DES MENUISERIES EXTÉRIEURES",
+        "Opération",
+        "Résidence Les Érables - 48 logements",
+        "Lot 03 Menuiseries extérieures",
+    )
+    assert detect_title(doc) == "Résidence Les Érables - 48 logements"
+
+
+def test_title_cuts_an_address_glued_to_the_line() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "Description du projet : Construction d'une crèche de 60 berceaux "
+        "Site Nord 4 avenue des Peupliers 94000 Exempleville",
+    )
+    assert detect_title(doc) == "Construction d'une crèche de 60 berceaux Site Nord"
+
+
+def test_title_falls_back_to_a_short_capital_name() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover("PARC NORD - HALL C", "DOSSIER DCE", "LOT 05 MENUISERIES EXTÉRIEURES")
+    assert detect_title(doc) == "PARC NORD - HALL C"
