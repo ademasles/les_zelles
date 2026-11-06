@@ -2,7 +2,7 @@ import io
 
 import pytest
 
-from zelles.domain.documents import BlockKind
+from zelles.domain.documents import BlockKind, ParsedDocument
 from zelles.ingest.chunking import chunk_document
 from zelles.ingest.cleaning import clean_text
 from zelles.ingest.outline import detect_heading
@@ -91,3 +91,130 @@ def test_sniff_rejects_unknown() -> None:
         sniff_media_type(b"MZ\x90\x00", "virus.exe")
     with pytest.raises(UnsupportedDocumentError):
         sniff_media_type(b"PK\x03\x04", "archive.zip")
+
+
+# --------------------------------------------------------------------------- cover title
+def _cover(*lines: str) -> ParsedDocument:
+    from zelles.domain.documents import Block
+
+    blocks = [Block(kind=BlockKind.PARAGRAPH, text=t, page=1) for t in lines]
+    blocks.append(Block(kind=BlockKind.PARAGRAPH, text="Construction d'un hangar", page=2))
+    return ParsedDocument(filename="cctp.pdf", media_type="application/pdf", blocks=blocks)
+
+
+def test_title_is_the_line_naming_the_works() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "CAHIER DES CLAUSES TECHNIQUES PARTICULIÈRES",
+        "LOT N°05 MENUISERIES EXTÉRIEURES",
+        "Maître d'ouvrage : Office public de l'habitat",
+        "CONSTRUCTION DE 32 LOGEMENTS COLLECTIFS ET D'UN PARKING",
+        "12 rue des Lilas",
+        "91000 Exempleville",
+        "Phase DCE - Indice B - Date : 03/2026",
+    )
+    assert detect_title(doc) == "CONSTRUCTION DE 32 LOGEMENTS COLLECTIFS ET D'UN PARKING"
+
+
+def test_title_prefers_a_labelled_operation() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "Opération : Réhabilitation du groupe scolaire des Érables",
+        "Extension du bâtiment B",
+    )
+    assert detect_title(doc) == "Réhabilitation du groupe scolaire des Érables"
+
+
+def test_no_title_when_the_cover_is_only_boilerplate() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover("C.C.T.P.", "Lot 02 - Menuiseries extérieures", "Architecte : Atelier X")
+    assert detect_title(doc) is None
+
+
+def test_sample_cctp_gets_its_title(sample_bytes: bytes) -> None:
+    from zelles.ingest.title import detect_title
+
+    doc, _ = parse_document(sample_bytes, "cctp.md")
+    assert detect_title(doc) == (
+        "Construction de 24 logements collectifs - Résidence Les Tilleuls "
+        "(document synthétique de test)"
+    )
+
+
+def test_title_joins_capital_lines_and_drops_parties_and_address() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "MARCHÉ PUBLIC DE TRAVAUX",
+        "MAÎTRE D'OUVRAGE",
+        "COMMUNE D'EXEMPLEVILLE",
+        "RESTRUCTURATION DU GROUPE SCOLAIRE",
+        "JEAN MOULIN - BÂTIMENT B",
+        "12 rue des Lilas 91000 Exempleville",
+        "Architecte : Atelier X",
+        "CAHIER DES CLAUSES TECHNIQUES PARTICULIÈRES",
+    )
+    assert detect_title(doc) == "RESTRUCTURATION DU GROUPE SCOLAIRE JEAN MOULIN - BÂTIMENT B"
+
+
+def test_title_after_a_label_on_its_own_line() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "REMPLACEMENT DES MENUISERIES EXTÉRIEURES",
+        "Opération",
+        "Résidence Les Érables - 48 logements",
+        "Lot 03 Menuiseries extérieures",
+    )
+    assert detect_title(doc) == "Résidence Les Érables - 48 logements"
+
+
+def test_title_cuts_an_address_glued_to_the_line() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "Description du projet : Construction d'une crèche de 60 berceaux "
+        "Site Nord 4 avenue des Peupliers 94000 Exempleville",
+    )
+    assert detect_title(doc) == "Construction d'une crèche de 60 berceaux Site Nord"
+
+
+def test_title_falls_back_to_a_short_capital_name() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover("PARC NORD - HALL C", "DOSSIER DCE", "LOT 05 MENUISERIES EXTÉRIEURES")
+    assert detect_title(doc) == "PARC NORD - HALL C"
+
+
+def test_title_keeps_city_and_site_but_not_lot_label_or_references() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "AB 102 - AB 103 - AC 17",
+        "EXEMPLEVILLE (91)",
+        "CONSTRUCTION D'UN GYMNASE",
+        "SITE DES SABLONS - LOT 02 - 3 rue Haute",
+        "Lot 02 Menuiseries extérieures",
+    )
+    assert detect_title(doc) == "EXEMPLEVILLE CONSTRUCTION D'UN GYMNASE SITE DES SABLONS"
+
+
+def test_title_stops_at_the_next_label() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover("Opération : Extension du collège Victor Hugo Adresse du projet : voir plan")
+    assert detect_title(doc) == "Extension du collège Victor Hugo"
+
+
+def test_labelled_value_with_a_lot_beats_a_works_title() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "REMPLACEMENT DES MENUISERIES EXTÉRIEURES",
+        "OPÉRATION",
+        "Résidence du Parc - Lot 02",
+    )
+    assert detect_title(doc) == "Résidence du Parc"

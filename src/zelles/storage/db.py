@@ -23,6 +23,7 @@ class DocumentRow(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     filename: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     media_type: Mapped[str] = mapped_column(String(128))
     size_bytes: Mapped[int] = mapped_column(Integer)
     page_count: Mapped[int] = mapped_column(Integer, default=0)

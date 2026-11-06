@@ -31,6 +31,7 @@ from zelles.extraction.verify import verify_requirement
 from zelles.graph.knowledge import KnowledgeGraph, build_graph
 from zelles.ingest.chunking import chunk_document
 from zelles.ingest.parsers import parse_document
+from zelles.ingest.title import detect_title
 from zelles.llm.base import LLM, Completion, Embedder, LLMError, Message
 from zelles.retrieval.index import DocumentIndex
 
@@ -124,6 +125,7 @@ async def analyze(
     sheet = SpecSheet(
         document_id=doc_id,
         filename=filename,
+        title=detect_title(document),
         model=llm.name if llm else "rules",
         lots=sorted({c.lot for c in chunks if c.lot}),
         requirements=requirements,

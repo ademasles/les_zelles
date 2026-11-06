@@ -20,7 +20,8 @@ async function refreshDocs() {
   const docs = await api("/documents");
   $("docs").innerHTML = docs.map((d) => `
     <li data-id="${d.id}" class="${current?.sheet.document_id === d.id ? "active" : ""}">
-      <div class="name">${esc(d.filename)}</div>
+      <div class="name">${esc(d.title || d.filename)}</div>
+      ${d.title ? `<div class="small muted">${esc(d.filename)}</div>` : ""}
       <div class="small muted">${d.status} · ${d.requirements} values · ${esc(d.model || "")}</div>
     </li>`).join("");
   document.querySelectorAll("#docs li").forEach((li) => li.addEventListener("click", () => openDoc(li.dataset.id)));
@@ -58,8 +59,8 @@ async function openDoc(id) {
   const s = current.sheet;
   $("empty").classList.add("hidden");
   $("doc").classList.remove("hidden");
-  $("doc-title").textContent = s.filename;
-  $("doc-meta").textContent = `${s.lots.join(" · ") || "No lot detected"} · analysed with ${s.model}`;
+  $("doc-title").textContent = s.title || s.filename;
+  $("doc-meta").textContent = [s.title ? s.filename : null, s.lots.join(" · ") || "No lot detected", `analysed with ${s.model}`].filter(Boolean).join(" · ");
   for (const fmt of ["xlsx", "csv", "json"]) $(`x-${fmt}`).href = withKey(`${API}/documents/${id}/export.${fmt}`);
   const verified = s.requirements.filter((r) => r.status === "verified").length;
   const cost = s.usage.cost_usd == null ? "n/a" : `$${s.usage.cost_usd.toFixed(4)}`;
