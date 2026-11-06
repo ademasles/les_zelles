@@ -198,7 +198,7 @@ def test_precision_no_free_text_catch_alls() -> None:
     )
     assert not _values(reqs, F.AIR_INLETS)
     assert not _values(reqs, F.INSTALLATION)
-    assert "Wood" not in _values(reqs, F.FRAME_MATERIAL)
+    assert "Bois" not in _values(reqs, F.FRAME_MATERIAL)
     assert not _values(reqs, F.PROFILE_SYSTEM)
 
 
@@ -210,3 +210,23 @@ def test_values_end_on_a_whole_word() -> None:
     for value in _values(reqs, F.PROFILE_SYSTEM):
         assert not value.endswith(("Pan", "Panora")), value
     assert any("Panoramique" in v for v in _values(reqs, F.PROFILE_SYSTEM))
+
+
+def test_bare_numbers_continue_a_list_of_european_standards() -> None:
+    reqs = _extract(
+        "Les menuiseries seront conformes au NF DTU 36.5 et aux normes "
+        "EN 12207, 12208 et 12210 ; la norme 1990 de référence est citée pour mémoire."
+    )
+    found = _values(reqs, F.STANDARDS)
+    assert {"EN 12208", "EN 12210"} <= found, found
+    assert "EN 1990" not in found
+
+
+def test_accessibility_range_keeps_both_bounds() -> None:
+    reqs = _extract("Les poignées seront placées entre 0,90 m et 1,30 m du sol fini (PMR).")
+    assert any("0,90 m et 1,30 m" in v for v in _values(reqs, F.ACCESSIBILITY))
+
+
+def test_materials_are_named_in_french() -> None:
+    reqs = _extract("Fenêtres en bois-aluminium, portes-fenêtres en bois massif.")
+    assert {"Bois-aluminium", "Bois"} <= _values(reqs, F.FRAME_MATERIAL)
