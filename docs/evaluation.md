@@ -18,9 +18,12 @@ evals/golden/<case>/
 
 A prediction matches an expected requirement when the field is the same and either the number is equal (`numeric`) or the expected text appears, accent- and case-insensitively, in the predicted value or its quote (`value`). Scope is not scored yet.
 
+The **strict** score drops the quote: the expected text must appear in the extracted value itself. The lenient score credits a correct line whose value is garbled ("laqué blanc placé entre 0" from a line that says RAL 9016); the strict score does not, and it is closer to what an estimator reads in the sheet. Both are reported.
+
 ## Metrics
 
-- **Precision, recall, F1** per case and micro-averaged, plus the list of misses.
+- **Precision, recall, F1** per case and micro-averaged, lenient and strict, plus the list of misses.
+- **95 % interval** of micro F1, by bootstrap over cases. Tenders are the unit of evidence, so with three held-out tenders the interval is wide; a change inside it is not a measured improvement.
 - **Grounded:** the share of predicted requirements whose quote was found in the source.
 - **Cost:** tokens and USD for the run.
 
