@@ -135,7 +135,7 @@ All settings are environment variables prefixed `ZELLES_` (or a `.env` file). Se
 | `ZELLES_LLM_CONCURRENCY` | `2` | Use `1` on a single local GPU |
 | `ZELLES_DATABASE_URL` | SQLite in `data/` | Any SQLAlchemy URL; migrations run on startup |
 | `ZELLES_API_KEY` | unset | Protects the API when set |
-| `ZELLES_OCR_ENABLED` | `true` | Tesseract fallback for scanned pages |
+| `ZELLES_OCR_ENABLED` | `true` | OCR for scanned pages (Tesseract, else Docling) |
 
 ## Project layout
 
@@ -167,7 +167,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/architecture.md](docs/architec
 
 ## Limits
 
-- Scanned pages need Tesseract (or the optional Docling parser, which is slower). Most CCTPs are exported from Word and have a text layer.
+- Scanned pages need Tesseract or Docling. With only Docling installed, it OCRs the pages without text and pdfium still reads the rest. Most CCTPs are exported from Word and have a text layer.
 - Tables spanning several pages and drawings are not interpreted; requirements stated only in plans or in the DPGF are out of scope.
 - Extraction targets French CCTPs. Field labels and the code are in English; prompts ask the model to quote the French source verbatim.
 

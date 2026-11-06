@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     # ---------------------------------------------------------------- ingestion
     parser: Literal["auto", "pdfium", "docling"] = "auto"
     ocr_enabled: bool = Field(
-        default=True, description="OCR pages without text if tesseract exists."
+        default=True, description="OCR pages without text, with Tesseract or else Docling."
     )
     ocr_language: str = "fra"
     chunk_max_chars: int = 2400
