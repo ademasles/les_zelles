@@ -187,3 +187,34 @@ def test_title_falls_back_to_a_short_capital_name() -> None:
 
     doc = _cover("PARC NORD - HALL C", "DOSSIER DCE", "LOT 05 MENUISERIES EXTÉRIEURES")
     assert detect_title(doc) == "PARC NORD - HALL C"
+
+
+def test_title_keeps_city_and_site_but_not_lot_label_or_references() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "AB 102 - AB 103 - AC 17",
+        "EXEMPLEVILLE (91)",
+        "CONSTRUCTION D'UN GYMNASE",
+        "SITE DES SABLONS - LOT 02 - 3 rue Haute",
+        "Lot 02 Menuiseries extérieures",
+    )
+    assert detect_title(doc) == "EXEMPLEVILLE CONSTRUCTION D'UN GYMNASE SITE DES SABLONS"
+
+
+def test_title_stops_at_the_next_label() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover("Opération : Extension du collège Victor Hugo Adresse du projet : voir plan")
+    assert detect_title(doc) == "Extension du collège Victor Hugo"
+
+
+def test_labelled_value_with_a_lot_beats_a_works_title() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "REMPLACEMENT DES MENUISERIES EXTÉRIEURES",
+        "OPÉRATION",
+        "Résidence du Parc - Lot 02",
+    )
+    assert detect_title(doc) == "Résidence du Parc"

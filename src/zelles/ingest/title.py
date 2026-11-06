@@ -61,6 +61,14 @@ _WORKS = re.compile(
 _CONTINUES = re.compile(
     r"(?:\b(?:de|des|du|d['’]|et|à|a|au|aux|en|sur|pour|la|le|les)|[-–,&])$", re.I
 )
+_TAIL = re.compile(  # where a title line stops: a lot, or the next label
+    r"[-–(,]?\s*\blot\s*(?:n\s*[°ºo]\.?\s*)?\d|"
+    r"\badresse\s+du\s+(?:projet|chantier|site)\b|"
+    r"\b(?:adresse|lieu(?:\s+d['’]ex[ée]cution)?|localisation|situation|commune)\s*:",
+    re.I,
+)
+_POSTCODE_IN_PARENS = re.compile(r"\(\s*\d{2,5}\s*\)")  # "EXEMPLEVILLE (91)" names a place
+_WORD = re.compile(r"[^\W\d_]{4,}")
 _MAX_CHARS = 200
 
 
@@ -69,12 +77,20 @@ def _mostly_upper(text: str) -> bool:
     return len(letters) >= 3 and sum(c.isupper() for c in letters) / len(letters) >= 0.8
 
 
+def _tidy(text: str) -> str:
+    return " ".join(_POSTCODE_IN_PARENS.sub("", text).split()).strip(" -–:;,.")
+
+
 def _cut(text: str) -> str:
-    """Drop an address or a party glued to a title line; "" if the line is one."""
-    for pattern in (_ADDRESS, _ROLE):
-        if m := pattern.search(text):
-            text = text[: m.start()]
-    return " ".join(text.split()).strip(" -–:;,.")
+    """Keep what precedes a lot, a label, an address or a party; "" if the line is one."""
+    text = _tidy(text)
+    starts = [m.start() for p in (_TAIL, _ADDRESS, _ROLE) if (m := p.search(text))]
+    return _tidy(text[: min(starts)]) if starts else text
+
+
+def _is_reference(text: str) -> bool:
+    """Parcel or file references ("AB 12 - AB 13"): codes, no words."""
+    return any(c.isdigit() for c in text) and not _WORD.search(text)
 
 
 def _shorten(text: str) -> str:
@@ -118,6 +134,8 @@ def detect_title(document: ParsedDocument) -> str | None:
         if skip_party:
             skip_party = False
             continue
+        if _is_reference(raw):
+            continue
         line = _cut(raw)
         if len(line) < 3 or _BOILERPLATE.search(line):
             close()
@@ -129,7 +147,7 @@ def detect_title(document: ParsedDocument) -> str | None:
         ):
             close()
         run.append(line)
-        if len(line) < len(" ".join(raw.split()).strip(" -–:;,.")):
+        if len(line) < len(_tidy(raw)):
             close()  # an address or a party followed: the title ends here
     close()
 
