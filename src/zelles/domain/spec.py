@@ -526,6 +526,7 @@ class SpecSheet(BaseModel):
     schema_version: str = "1.0"
     document_id: str
     filename: str
+    title: str | None = Field(default=None, description="Project name from the cover page.")
     model: str
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     lots: list[str] = Field(default_factory=list)

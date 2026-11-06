@@ -127,6 +127,7 @@ class Workspace:
                     size_bytes=0,
                 )
                 session.add(row)
+            row.title = analysis.sheet.title
             row.page_count = analysis.document.page_count
             row.model = analysis.sheet.model
             row.requirement_count = len(analysis.sheet.requirements)
@@ -150,6 +151,7 @@ class Workspace:
                 {
                     "id": r.id,
                     "filename": r.filename,
+                    "title": r.title,
                     "status": r.status,
                     "pages": r.page_count,
                     "model": r.model,

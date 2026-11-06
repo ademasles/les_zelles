@@ -2,7 +2,7 @@ import io
 
 import pytest
 
-from zelles.domain.documents import BlockKind
+from zelles.domain.documents import BlockKind, ParsedDocument
 from zelles.ingest.chunking import chunk_document
 from zelles.ingest.cleaning import clean_text
 from zelles.ingest.outline import detect_heading
@@ -91,3 +91,54 @@ def test_sniff_rejects_unknown() -> None:
         sniff_media_type(b"MZ\x90\x00", "virus.exe")
     with pytest.raises(UnsupportedDocumentError):
         sniff_media_type(b"PK\x03\x04", "archive.zip")
+
+
+# --------------------------------------------------------------------------- cover title
+def _cover(*lines: str) -> ParsedDocument:
+    from zelles.domain.documents import Block
+
+    blocks = [Block(kind=BlockKind.PARAGRAPH, text=t, page=1) for t in lines]
+    blocks.append(Block(kind=BlockKind.PARAGRAPH, text="Construction d'un hangar", page=2))
+    return ParsedDocument(filename="cctp.pdf", media_type="application/pdf", blocks=blocks)
+
+
+def test_title_is_the_line_naming_the_works() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "CAHIER DES CLAUSES TECHNIQUES PARTICULIÈRES",
+        "LOT N°05 MENUISERIES EXTÉRIEURES",
+        "Maître d'ouvrage : Office public de l'habitat",
+        "CONSTRUCTION DE 32 LOGEMENTS COLLECTIFS ET D'UN PARKING",
+        "12 rue des Lilas",
+        "91000 Exempleville",
+        "Phase DCE - Indice B - Date : 03/2026",
+    )
+    assert detect_title(doc) == "CONSTRUCTION DE 32 LOGEMENTS COLLECTIFS ET D'UN PARKING"
+
+
+def test_title_prefers_a_labelled_operation() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover(
+        "Opération : Réhabilitation du groupe scolaire des Érables",
+        "Extension du bâtiment B",
+    )
+    assert detect_title(doc) == "Réhabilitation du groupe scolaire des Érables"
+
+
+def test_no_title_when_the_cover_is_only_boilerplate() -> None:
+    from zelles.ingest.title import detect_title
+
+    doc = _cover("C.C.T.P.", "Lot 02 - Menuiseries extérieures", "Architecte : Atelier X")
+    assert detect_title(doc) is None
+
+
+def test_sample_cctp_gets_its_title(sample_bytes: bytes) -> None:
+    from zelles.ingest.title import detect_title
+
+    doc, _ = parse_document(sample_bytes, "cctp.md")
+    assert detect_title(doc) == (
+        "Construction de 24 logements collectifs - Résidence Les Tilleuls "
+        "(document synthétique de test)"
+    )

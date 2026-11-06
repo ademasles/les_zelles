@@ -41,6 +41,9 @@ def test_full_flow(client: TestClient, sample_bytes: bytes, sample_pdf: bytes) -
 
     detail = client.get(f"/api/v1/documents/{doc_id}").json()
     assert detail["paginated"] is True
+    assert detail["sheet"]["title"].startswith("Construction de 24 logements collectifs")
+    listed = client.get("/api/v1/documents").json()
+    assert listed[0]["title"] == detail["sheet"]["title"]
     reqs = detail["sheet"]["requirements"]
     uw = next(r for r in reqs if r["field"] == "uw")
     assert uw["citation"]["page"] >= 1
