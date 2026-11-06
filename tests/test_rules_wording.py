@@ -240,3 +240,20 @@ def test_standards_with_spaced_numbers_and_part_suffixes() -> None:
     found = " | ".join(sorted(_values(reqs, F.STANDARDS)))
     for want in ("EN 12 207", "EN 12 208", "EN 12 210", "DTU 36-1", "DTU 39"):
         assert want in found, (want, found)
+
+
+def test_shutter_box_form_and_drive_outside_the_clause_window() -> None:
+    reqs = _extract(
+        "Les coffres monoblocs de volets roulants seront isolés.\n\n"
+        "Les volets roulants seront à lames PVC double paroi de 8 mm, coulissant dans des "
+        "coulisses aluminium, et s'enroulant sur un axe acier à l'aide d'un mécanisme de treuil.\n\n"
+        "Manœuvre manuelle par tringle sauf dans les chambres PMR où les volets seront motorisés."
+    )
+    found = " | ".join(sorted(_values(reqs, F.SHUTTERS)))
+    for want in ("monoblocs", "treuil", "tringle", "motorisés"):
+        assert want in found, (want, found)
+
+
+def test_shutter_drive_words_need_a_shutter_subject() -> None:
+    reqs = _extract("Les menuiseries seront livrées avec une radio de chantier et des sangles.")
+    assert not _values(reqs, F.SHUTTERS)
