@@ -198,3 +198,13 @@ def test_precision_no_free_text_catch_alls() -> None:
     assert not _values(reqs, F.INSTALLATION)
     assert "Wood" not in _values(reqs, F.FRAME_MATERIAL)
     assert not _values(reqs, F.PROFILE_SYSTEM)
+
+
+def test_values_end_on_a_whole_word() -> None:
+    reqs = _extract(
+        "Profilés PVC à 5 chambres minimum, renforts acier galvanisé, type Gamme Panoramique "
+        "ou techniquement équivalent."
+    )
+    for value in _values(reqs, F.PROFILE_SYSTEM):
+        assert not value.endswith(("Pan", "Panora")), value
+    assert any("Panoramique" in v for v in _values(reqs, F.PROFILE_SYSTEM))

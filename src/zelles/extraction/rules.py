@@ -748,6 +748,21 @@ def _keep(
     )
 
 
+def _whole_words(body: str, match: re.Match[str]) -> str:
+    """The match, finished to the end of its last word.
+
+    Rules take a bounded window after a keyword ("5 chambres" + up to 50
+    characters), which can stop mid-word: "type Gamme Con". The value an
+    estimator reads must not end on a fragment.
+    """
+    end = match.end()
+    if end == match.start() or not body[end - 1 : end].isalnum():
+        return match.group(0)
+    while end < len(body) and end - match.end() < 40 and body[end].isalnum():
+        end += 1
+    return body[match.start() : end]
+
+
 def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     """Run every rule over every chunk and return cited requirements."""
     found: dict[tuple[str, str, str], Requirement] = {}
@@ -778,7 +793,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     outside_lot=outside_lot,
                 ):
                     continue
-                raw = " ".join(match.group(0).split()).rstrip(" ,;:")
+                raw = " ".join(_whole_words(body, match).split()).rstrip(" ,;:")
                 value = rule.normalize(match) if rule.normalize else raw
                 check = validate(rule.field, value)
                 if not check.ok:
