@@ -559,7 +559,7 @@ RULES: list[Rule] = [
     Rule(
         F.STANDARDS,
         re.compile(
-            r"\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
+            r"\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:-\d{1,2}\b)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
             _I,
         ),
         0.9,
@@ -575,7 +575,7 @@ RULES: list[Rule] = [
     ),
     Rule(  # bare European numbers in a standards context: "conforme à la norme EN 1125"
         F.STANDARDS,
-        re.compile(r"(?<![\w.])(?<!NF )(?<!ISO )EN\s?\d{3,5}(?:-\d+)*\b"),
+        re.compile(r"(?<![\w.])(?<!NF )(?<!ISO )EN\s?(?:\d{2}\s\d{3}|\d{3,5})(?:-\d+)*\b"),
         0.8,
         requires=re.compile(r"normes?|conformes?|essais?|classification|selon", _I),
         in_heading=True,
