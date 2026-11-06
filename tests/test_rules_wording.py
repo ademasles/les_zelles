@@ -230,3 +230,13 @@ def test_accessibility_range_keeps_both_bounds() -> None:
 def test_materials_are_named_in_french() -> None:
     reqs = _extract("Fenêtres en bois-aluminium, portes-fenêtres en bois massif.")
     assert {"Bois-aluminium", "Bois"} <= _values(reqs, F.FRAME_MATERIAL)
+
+
+def test_standards_with_spaced_numbers_and_part_suffixes() -> None:
+    reqs = _extract(
+        "Essais selon les normes EN 12 207 - EN 12 208 - EN 12 210.\n\n"
+        "Mise en oeuvre conforme au DTU 36-1 et au DTU 39."
+    )
+    found = " | ".join(sorted(_values(reqs, F.STANDARDS)))
+    for want in ("EN 12 207", "EN 12 208", "EN 12 210", "DTU 36-1", "DTU 39"):
+        assert want in found, (want, found)
