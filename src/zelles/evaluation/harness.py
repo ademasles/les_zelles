@@ -93,6 +93,8 @@ _NF_PREFIX = re.compile(r"\bnf\s*\.\s*(?=[a-z])|\bnf(?=[abepsx]\s*\d)")  # "nf.p
 _NUMERO = re.compile(r"\bn\s*[°º]\s*")  # "n°39", "n° 39"
 _FIRST = re.compile(r"\b1er\b")  # "1er août" = "1 août"
 _DIGIT_SEP = re.compile(r"(?<=\d)(?:\s*[.\-]\s*|,|\s+)(?=\d)")  # "20.501" = "20-501" = "20 501"
+_UNIT_GLUE = re.compile(r"(?<=\d)(?=[a-z])")  # "37dB" = "37 dB"
+_PLURAL = re.compile(r"\b([a-z]{4,})s\b")  # "thermolaqués" = "thermolaqué"
 
 
 def _comparable(text: str) -> str:
@@ -100,7 +102,8 @@ def _comparable(text: str) -> str:
 
     Accents and case are folded, hyphens and stars become spaces ("warm-edge" =
     "warm edge"), dotted acronyms and "n°" are dropped ("D.T.U. n°39" = "DTU 39"),
-    "1er" is "1", and digit groups compare equal whatever the separator
+    "1er" is "1", a unit may be glued to its number ("37dB" = "37 dB"), a
+    plural "s" is dropped, and digit groups compare equal whatever the separator
     ("NF P 20-501" contains "20.501").
     """
     text = fold(text)
@@ -108,6 +111,8 @@ def _comparable(text: str) -> str:
     text = _NF_PREFIX.sub("nf ", text)
     text = _NUMERO.sub("", text)
     text = _FIRST.sub("1", text)
+    text = _UNIT_GLUE.sub(" ", text)
+    text = _PLURAL.sub(r"\1", text)
     text = " ".join(text.replace("*", " * ").replace("-", " ").split())
     return _DIGIT_SEP.sub(".", text)
 

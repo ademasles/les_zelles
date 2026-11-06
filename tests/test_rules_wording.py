@@ -26,6 +26,8 @@ F = SpecField
         ("CERFF", "certificat d'essais CER.F.F"),
         ("NFS 61-937", "conforme aux normes NFS 61.937"),
         ("1.30 m", "commandes situées entre 0,90 et 1,30 m"),
+        ("37 dB", "entrées d'air 37dB(A)"),
+        ("thermolaqués", "profilés aluminium thermolaqué"),
     ],
 )
 def test_comparable_folds_wording_variants(want: str, have: str) -> None:
