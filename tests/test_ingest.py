@@ -218,3 +218,85 @@ def test_labelled_value_with_a_lot_beats_a_works_title() -> None:
         "Résidence du Parc - Lot 02",
     )
     assert detect_title(doc) == "Résidence du Parc"
+
+
+# --------------------------------------------------------------------------- OCR fallback
+def _pdf_with_blank_page() -> bytes:
+    """Page 1 has text, page 2 has none, like a CCTP with a scanned annex."""
+    from fpdf import FPDF
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=10)
+    for line in ("2.3 Performances", "Classement A*3 E*7B V*A2 pour toutes les fenetres."):
+        pdf.multi_cell(0, 5, line, new_x="LMARGIN", new_y="NEXT")
+    pdf.add_page()
+    return bytes(pdf.output())
+
+
+def _fake_docling(seen: list[int]) -> object:
+    from types import SimpleNamespace
+
+    import pypdfium2 as pdfium
+
+    def convert(data: bytes, filename: str) -> object:
+        seen.append(len(pdfium.PdfDocument(data)))
+        box = SimpleNamespace(l=50.0, t=800.0, r=300.0, b=780.0, coord_origin="BOTTOMLEFT")
+        item = SimpleNamespace(
+            text="Uw ≤ 1,3 W/m².K pour les châssis",
+            prov=[SimpleNamespace(page_no=1, bbox=box)],
+        )
+        return SimpleNamespace(iterate_items=lambda: [(item, 0)])
+
+    return convert
+
+
+def test_docling_ocrs_only_the_pages_without_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    from zelles.ingest import parsers
+
+    seen: list[int] = []
+    monkeypatch.setattr(parsers, "_tesseract_available", lambda: False)
+    monkeypatch.setattr(parsers, "_docling_available", lambda: True)
+    monkeypatch.setattr(parsers, "_docling_convert", _fake_docling(seen))
+
+    doc, _ = parse_document(_pdf_with_blank_page(), "cctp.pdf")
+
+    assert seen == [1]  # Docling received the scanned page alone
+    assert doc.parser == "pdfium+docling-ocr"
+    assert [p.ocr for p in doc.pages] == [False, True]
+    scanned = [b for b in doc.blocks if b.page == 2]
+    assert [b.text for b in scanned] == ["Uw ≤ 1,3 W/m2.K pour les châssis"]
+    height = doc.pages[1].height
+    assert scanned[0].bbox is not None
+    assert scanned[0].bbox.y0 == pytest.approx(height - 800.0)
+    assert any("A*3 E*7B V*A2" in b.text for b in doc.blocks if b.page == 1)
+    assert not doc.warnings
+
+
+def test_scanned_page_without_ocr_engine_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    from zelles.ingest import parsers
+
+    monkeypatch.setattr(parsers, "_tesseract_available", lambda: False)
+    monkeypatch.setattr(parsers, "_docling_available", lambda: False)
+
+    doc, _ = parse_document(_pdf_with_blank_page(), "cctp.pdf")
+
+    assert doc.warnings == ["page 2 has no text layer and OCR is unavailable"]
+    assert doc.parser == "pdfium"
+
+
+def test_failed_docling_ocr_keeps_the_text_pages(monkeypatch: pytest.MonkeyPatch) -> None:
+    from zelles.ingest import parsers
+
+    def broken(data: bytes, filename: str) -> object:
+        raise RuntimeError("model download blocked")
+
+    monkeypatch.setattr(parsers, "_tesseract_available", lambda: False)
+    monkeypatch.setattr(parsers, "_docling_available", lambda: True)
+    monkeypatch.setattr(parsers, "_docling_convert", broken)
+
+    doc, _ = parse_document(_pdf_with_blank_page(), "cctp.pdf")
+
+    assert "Docling OCR failed: model download blocked" in doc.warnings
+    assert "page 2 has no text layer and OCR found no text" in doc.warnings
+    assert any("A*3 E*7B V*A2" in b.text for b in doc.blocks)

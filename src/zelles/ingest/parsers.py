@@ -2,8 +2,9 @@
 
 Default stack, all permissively licensed and CPU-only:
 
-* PDF  -> pypdfium2 (text + line boxes for highlighting), OCR fallback with
-  Tesseract on pages that have no text layer.
+* PDF  -> pypdfium2 (text + line boxes for highlighting). Pages without a text
+  layer (scans) are OCR'd with Tesseract, or with Docling when only Docling is
+  installed; Docling then reads those pages only, not the whole document.
 * DOCX -> converted to PDF with LibreOffice when available (keeps pages and
   boxes for highlighting), else parsed with python-docx (headings, tables).
 * TXT / MD -> read as is.
@@ -13,6 +14,7 @@ Docling can be enabled for complex layouts (``ZELLES_PARSER=docling``).
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import logging
 import shutil
@@ -20,7 +22,7 @@ import subprocess
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from zelles.domain.documents import BBox, Block, BlockKind, Page, ParsedDocument
 from zelles.ingest.cleaning import clean_text
@@ -126,6 +128,19 @@ def _tesseract_available() -> bool:
     return True
 
 
+def _docling_available() -> bool:
+    return importlib.util.find_spec("docling") is not None
+
+
+def ocr_engine() -> str | None:
+    """The OCR engine used for pages without text: Tesseract first, Docling second."""
+    if _tesseract_available():
+        return "tesseract"
+    if _docling_available():
+        return "docling"
+    return None
+
+
 # --------------------------------------------------------------------------- PDF
 class PdfiumParser:
     """Fast, permissive PDF parser based on pdfium."""
@@ -145,20 +160,12 @@ class PdfiumParser:
         try:
             for index in range(len(pdf)):
                 page = pdf[index]
-                number = index + 1
                 width, height = page.get_size()
-                lines = self._lines(page, height)
-                ocr_used = False
-                if sum(len(t) for t, _ in lines) < 20 and self.ocr:
-                    ocr_lines = self._ocr(page)
-                    if ocr_lines:
-                        lines, ocr_used = ocr_lines, True
-                    else:
-                        doc.warnings.append(
-                            f"page {number} has no text layer and OCR is unavailable"
-                        )
-                raw.append((lines, height))
-                doc.pages.append(Page(number=number, width=width, height=height, ocr=ocr_used))
+                raw.append((self._lines(page, height), height))
+                doc.pages.append(Page(number=index + 1, width=width, height=height))
+            textless = [i for i, (lines, _) in enumerate(raw) if sum(len(t) for t, _ in lines) < 20]
+            if textless and self.ocr:
+                self._ocr_pages(pdf, textless, raw, doc)
         finally:
             pdf.close()
         for page_info, lines in zip(doc.pages, strip_furniture(raw), strict=True):
@@ -166,6 +173,35 @@ class PdfiumParser:
             doc.blocks.extend(blocks)
             page_info.text = "\n".join(b.text for b in blocks)
         return doc
+
+    def _ocr_pages(
+        self,
+        pdf: object,
+        indices: list[int],
+        raw: list[tuple[list[tuple[str, BBox | None]], float | None]],
+        doc: ParsedDocument,
+    ) -> None:
+        """Replace the lines of pages without text by OCR, in place."""
+        engine = ocr_engine()
+        found: dict[int, list[tuple[str, BBox | None]]] = {}
+        if engine == "tesseract":
+            for index in indices:
+                found[index] = self._ocr(pdf[index])  # type: ignore[index]
+        elif engine == "docling":
+            try:
+                found = docling_ocr(pdf, indices)
+            except Exception as exc:  # a failed OCR must not lose the text pages
+                log.warning("Docling OCR failed: %s", exc)
+                doc.warnings.append(f"Docling OCR failed: {exc}")
+            else:
+                doc.parser = f"{self.name}+docling-ocr"
+        for index in indices:
+            if found.get(index):
+                raw[index] = (found[index], raw[index][1])
+                doc.pages[index].ocr = True
+            else:
+                reason = "OCR found no text" if engine else "OCR is unavailable"
+                doc.warnings.append(f"page {index + 1} has no text layer and {reason}")
 
     @staticmethod
     def _lines(page: object, page_height: float) -> list[tuple[str, BBox | None]]:
@@ -184,8 +220,6 @@ class PdfiumParser:
             textpage.close()
 
     def _ocr(self, page: object) -> list[tuple[str, BBox | None]]:
-        if not _tesseract_available():
-            return []
         import pytesseract  # noqa: PLC0415
 
         scale = 300 / 72
@@ -349,17 +383,60 @@ class TextParser:
 
 
 # --------------------------------------------------------------------------- docling
+def _docling_box(box: object, page_height: float) -> BBox:
+    """Docling boxes may use a bottom-left origin; BBox uses a top-left one."""
+    left, top, right, bottom = (float(getattr(box, k)) for k in ("l", "t", "r", "b"))
+    if str(getattr(box, "coord_origin", "")).upper().endswith("TOPLEFT"):
+        return BBox(x0=left, y0=top, x1=right, y1=bottom)
+    return BBox(x0=left, y0=page_height - top, x1=right, y1=page_height - bottom)
+
+
+def _docling_convert(data: bytes, filename: str) -> object:  # pragma: no cover - optional
+    from docling.datamodel.base_models import DocumentStream  # noqa: PLC0415
+    from docling.document_converter import DocumentConverter  # noqa: PLC0415
+
+    stream = DocumentStream(name=filename, stream=io.BytesIO(data))
+    return DocumentConverter().convert(stream).document
+
+
+def docling_ocr(pdf: object, indices: list[int]) -> dict[int, list[tuple[str, BBox | None]]]:
+    """OCR some pages of an open pdfium document with Docling.
+
+    Only those pages are copied into a new PDF, so a 60-page CCTP with a scanned
+    annex costs a few seconds, not a full Docling run. Returns lines per page index.
+    """
+    import pypdfium2 as pdfium  # noqa: PLC0415
+
+    subset = pdfium.PdfDocument.new()
+    try:
+        subset.import_pages(pdf, pages=indices)
+        buffer = io.BytesIO()
+        subset.save(buffer)
+    finally:
+        subset.close()
+    heights = {n + 1: pdf[i].get_size()[1] for n, i in enumerate(indices)}  # type: ignore[index]
+    source = _docling_convert(buffer.getvalue(), "ocr.pdf")
+    lines: dict[int, list[tuple[str, BBox | None]]] = {}
+    for item, _level in source.iterate_items():  # type: ignore[attr-defined]
+        text = clean_text(getattr(item, "text", "") or "")
+        prov = getattr(item, "prov", None)
+        if not text or not prov:
+            continue
+        page_no = int(prov[0].page_no)
+        if page_no not in heights:
+            continue
+        box = _docling_box(prov[0].bbox, heights[page_no])
+        lines.setdefault(indices[page_no - 1], []).append((text, box))
+    return lines
+
+
 class DoclingParser:
     """Layout-aware parser (tables, reading order) for difficult PDFs. Optional extra."""
 
     name = "docling"
 
     def parse(self, data: bytes, filename: str) -> ParsedDocument:  # pragma: no cover - optional
-        from docling.datamodel.base_models import DocumentStream  # noqa: PLC0415
-        from docling.document_converter import DocumentConverter  # noqa: PLC0415
-
-        result = DocumentConverter().convert(DocumentStream(name=filename, stream=io.BytesIO(data)))
-        source = result.document
+        source: Any = _docling_convert(data, filename)
         doc = ParsedDocument(filename=filename, media_type=PDF, parser=self.name)
         heights: dict[int, float] = {}
         for number, page in getattr(source, "pages", {}).items():
@@ -386,9 +463,7 @@ class DoclingParser:
             if getattr(item, "prov", None):
                 prov = item.prov[0]
                 page_no = int(prov.page_no)
-                b = prov.bbox
-                h = heights.get(page_no, 0.0)
-                bbox = BBox(x0=b.l, y0=h - b.t, x1=b.r, y1=h - b.b)
+                bbox = _docling_box(prov.bbox, heights.get(page_no, 0.0))
             level = None
             if kind == BlockKind.HEADING:
                 heading = detect_heading(text, style_level=1)
