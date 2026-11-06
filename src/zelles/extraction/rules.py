@@ -57,10 +57,10 @@ _BEFORE = 80  # characters looked at by ``before_excludes``
 def _material(match: re.Match[str]) -> str:
     word = match.group(0).lower()
     if "bois" in word and "alu" in word:
-        return "Wood-aluminium"
+        return "Bois-aluminium"
     if "pvc" in word and "alu" in word:
         return "PVC-aluminium"
-    return {"pvc": "PVC", "aluminium": "Aluminium", "alu": "Aluminium", "bois": "Wood"}.get(
+    return {"pvc": "PVC", "aluminium": "Aluminium", "alu": "Aluminium", "bois": "Bois"}.get(
         word, match.group(0)
     )
 
@@ -329,7 +329,7 @@ RULES: list[Rule] = [
         F.FRAME_MATERIAL,
         re.compile(r"\bbois\s+(?:massif|exotique|résineux|lamellé[- ]collé|aboutés?)\b", _I),
         0.6,
-        normalize=lambda m: "Wood",
+        normalize=lambda m: "Bois",
     ),
     Rule(
         F.OPENING_TYPE,
@@ -521,7 +521,7 @@ RULES: list[Rule] = [
         F.ACCESSIBILITY,
         re.compile(
             r"\bPMR\b[^.;\n]{0,60}|\bseuil[^.;,\n]{0,60}|\beffort de man(?:œ|oe)uvre[^.;,\n]{0,40}"
-            r"|\b(?:hauteur|poignées?|organes?\s+de\s+man(?:œ|oe)uvre|commandes?|man(?:œ|oe)uvres?)\b[^.;\n]{0,50}?\b[01][.,]\d{2}\s*m\b",
+            r"|\b(?:hauteur|poignées?|organes?\s+de\s+man(?:œ|oe)uvre|commandes?|man(?:œ|oe)uvres?)\b[^.;\n]{0,50}?\b[01][.,]\d{2}\s*m\b(?:\s*(?:et|à|-)\s*[01][.,]\d{2}\s*m\b)?",
             _I,
         ),
         0.65,
@@ -578,6 +578,17 @@ RULES: list[Rule] = [
         re.compile(r"(?<![\w.])(?<!NF )(?<!ISO )EN\s?\d{3,5}(?:-\d+)*\b"),
         0.8,
         requires=re.compile(r"normes?|conformes?|essais?|classification|selon", _I),
+        in_heading=True,
+    ),
+    Rule(  # a list continued with bare numbers: "EN 12207, 12208 et 12210"
+        F.STANDARDS,
+        re.compile(r"(?<![\w.\-])\d{4,5}(?:-\d+)*\b"),
+        0.8,
+        before_requires=re.compile(
+            r"\bEN\s?\d{3,5}(?:-\d+)*(?:\s*(?:,|/|et|&)\s*(?:EN\s?)?\d{3,5}(?:-\d+)*)*"
+            r"\s*(?:,|/|et|&)\s*$"
+        ),
+        normalize=lambda m: f"EN {m.group(0)}",
         in_heading=True,
     ),
     Rule(  # snow and wind rules

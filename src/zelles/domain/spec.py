@@ -116,7 +116,7 @@ FIELD_CATALOG: dict[SpecField, FieldInfo] = {
             F.FRAME_MATERIAL,
             C.MATERIALS,
             "Frame material",
-            "Material of the joinery frames: PVC, aluminium, wood, or mixed (wood-aluminium, PVC-aluminium).",
+            "Material of the joinery frames, in French as in the CCTP: PVC, aluminium, bois, or mixed (bois-aluminium, PVC-aluminium).",
             [
                 "matériau",
                 "PVC",
