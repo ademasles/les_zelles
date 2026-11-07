@@ -489,6 +489,14 @@ RULES: list[Rule] = [
         requires=_SHUTTER_SUBJECT,
         excludes=re.compile(rf"{_HARDWARE_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
     ),
+    Rule(  # a maker named under a shutter heading: "volets pleins de chez Dupont"
+        F.SHUTTERS,
+        re.compile(r"\bde\s+chez\s+((?-i:[A-Z][a-zà-ÿ]+|[A-Z]{3,}))\b", _I),
+        0.6,
+        heading_requires=re.compile(r"volets?|persiennes?|stores?|fermetures?", _I),
+        excludes=re.compile(rf"{_HARDWARE_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
+        normalize=lambda m: m.group(1),
+    ),
     Rule(  # where the inlets go: "entrées d'air … dans les coffres de volets roulants"
         F.AIR_INLETS,
         re.compile(

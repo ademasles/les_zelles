@@ -337,3 +337,13 @@ def test_white_named_on_the_material() -> None:
     assert any("blanc" in v for v in _values(reqs, F.COLOR))
     handles = _extract("Poignées en PVC blanc sur toutes les fenêtres.")
     assert not _values(handles, F.COLOR)  # a handle's colour is not the joinery's
+
+
+def test_shutter_maker_named_under_a_shutter_heading() -> None:
+    reqs = _extract(
+        "Les volets pleins seront fournis de chez Menuisol, finition lasurée.",
+        heading="2.6 Volets battants",
+    )
+    assert "Menuisol" in _values(reqs, F.SHUTTERS)
+    elsewhere = _extract("Fourniture de joints de chez Menuisol pour les dormants.")
+    assert not _values(elsewhere, F.SHUTTERS)
