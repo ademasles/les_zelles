@@ -347,3 +347,10 @@ def test_shutter_maker_named_under_a_shutter_heading() -> None:
     assert "Menuisol" in _values(reqs, F.SHUTTERS)
     elsewhere = _extract("Fourniture de joints de chez Menuisol pour les dormants.")
     assert not _values(elsewhere, F.SHUTTERS)
+
+
+def test_glazing_unit_total_thickness() -> None:
+    reqs = _extract("Vitrage isolant de 28 mm d'épaisseur pour les baies du séjour.")
+    assert "28 mm" in _values(reqs, F.GLAZING_COMPOSITION)
+    gap = _extract("Double vitrage avec une lame d'air de 16 mm d'épaisseur.")
+    assert "16 mm" not in _values(gap, F.GLAZING_COMPOSITION)  # the gap, not the unit

@@ -252,6 +252,13 @@ RULES: list[Rule] = [
         0.7,
         requires=re.compile(r"vitrage|verre|glace", _I),
     ),
+    Rule(  # the unit's total thickness: "vitrage isolant de 28 mm d'épaisseur"
+        F.GLAZING_COMPOSITION,
+        re.compile(r"(?<![\w.,])(\d{2})\s*mm\s+d'épaisseur\b", _I),
+        0.65,
+        before_requires=re.compile(r"vitrages?(?:\s+isolants?)?\s*(?:\(|de\s+|:)?\s*$", _I),
+        normalize=lambda m: f"{m.group(1)} mm",
+    ),
     Rule(  # "442+16+442": laminated panes written with plus signs
         F.GLAZING_COMPOSITION,
         re.compile(r"(?<![\w+])\d{1,3}(?:\s*\+\s*\d{1,3}){2,4}(?![\w+])"),
