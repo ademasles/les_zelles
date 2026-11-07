@@ -128,6 +128,7 @@ _FIRST = re.compile(r"\b1er\b")  # "1er août" = "1 août"
 _DIGIT_SEP = re.compile(r"(?<=\d)(?:\s*[.\-]\s*|,|\s+)(?=\d)")  # "20.501" = "20-501" = "20 501"
 _UNIT_GLUE = re.compile(r"(?<=\d)(?=[a-z])")  # "37dB" = "37 dB"
 _PLURAL = re.compile(r"\b([a-z]{4,})s\b")  # "thermolaqués" = "thermolaqué"
+_FEMININE = re.compile(r"\b([a-z]{3,}e)e\b")  # "teintée" = "teinté" (accents already folded)
 
 
 def _comparable(text: str) -> str:
@@ -136,8 +137,9 @@ def _comparable(text: str) -> str:
     Accents and case are folded, hyphens and stars become spaces ("warm-edge" =
     "warm edge"), dotted acronyms and "n°" are dropped ("D.T.U. n°39" = "DTU 39"),
     "1er" is "1", a unit may be glued to its number ("37dB" = "37 dB"), a
-    plural "s" is dropped, and digit groups compare equal whatever the separator
-    ("NF P 20-501" contains "20.501").
+    plural "s" and a participle's feminine "e" are dropped ("teintées" = "teinté"),
+    and digit groups compare equal whatever the separator ("NF P 20-501"
+    contains "20.501").
     """
     text = fold(text)
     text = _ACRONYM.sub(lambda m: m.group(1).replace(".", "") + " ", text)
@@ -146,6 +148,7 @@ def _comparable(text: str) -> str:
     text = _FIRST.sub("1", text)
     text = _UNIT_GLUE.sub(" ", text)
     text = _PLURAL.sub(r"\1", text)
+    text = _FEMININE.sub(r"\1", text)
     text = " ".join(text.replace("*", " * ").replace("-", " ").split())
     return _DIGIT_SEP.sub(".", text)
 
