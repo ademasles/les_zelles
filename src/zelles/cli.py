@@ -234,12 +234,23 @@ def evaluate(
     golden_dir: Annotated[Path, typer.Argument(file_okay=False)] = Path("evals/golden"),
     model: ModelOpt = None,
     min_f1: Annotated[float, typer.Option(help="Fail (exit 1) below this micro F1")] = 0.0,
+    blind: Annotated[
+        bool,
+        typer.Option(help="Counts only: hide case names and missed values (held-out sets)."),
+    ] = False,
+    json_out: Annotated[
+        Path | None, typer.Option("--json", help="Also write the full report as JSON.")
+    ] = None,
 ) -> None:
     """Score extraction against the golden set (per-field precision, recall, F1)."""
     from zelles.evaluation.harness import run_eval  # noqa: PLC0415
 
     settings = _settings(model, None)
     report = asyncio.run(run_eval(golden_dir, settings))
+    if blind:
+        report = report.blinded()
+    if json_out is not None:
+        json_out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
     table = Table(title=f"Evaluation · {report.model}")
     for col in ("Case", "Precision", "Recall", "F1", "Strict F1", "Grounded", "Cost"):
         table.add_column(col)
@@ -268,6 +279,13 @@ def evaluate(
         console.print(
             f"micro F1 {label:<7} {f:.3f} (95% CI {lo:.3f}-{hi:.3f}) · P {p:.3f} · R {r:.3f}"
         )
+    fields = Table(title="Strict errors by field")
+    for col in ("Field", "Expected", "Missed", "Predicted", "Extra"):
+        fields.add_column(col)
+    for name, c in report.fields.items():
+        if c.misses or c.extras:
+            fields.add_row(name, str(c.expected), str(c.misses), str(c.predicted), str(c.extras))
+    console.print(fields)
     for miss in report.misses[:30]:
         console.print(f"  [yellow]missed[/] {miss}")
     if report.f1 < min_f1:

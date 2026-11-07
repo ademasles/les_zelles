@@ -8,6 +8,7 @@ from zelles.evaluation.harness import (
     CaseReport,
     Expected,
     bootstrap_f1,
+    field_counts,
     matches,
     micro_f1,
     run_eval,
@@ -39,6 +40,29 @@ def test_strict_match_ignores_the_quote() -> None:
     assert matches(garbled, expected)
     assert not matches(garbled, expected, strict=True)
     assert matches(clean, expected, strict=True)
+
+
+def test_field_counts_split_misses_and_extras() -> None:
+    expected = [
+        Expected(field=SpecField.FINISH, value="RAL 9016"),
+        Expected(field=SpecField.FINISH, value="anodisé"),
+    ]
+    predicted = [
+        _req("laqué RAL 9016", "Profilés laqués blanc RAL 9016"),
+        _req("brut", "Profilés bruts"),
+    ]
+    finish = field_counts(predicted, expected)["finish"]
+    assert (finish.expected, finish.found, finish.misses) == (2, 1, 1)
+    assert (finish.predicted, finish.correct, finish.extras) == (2, 1, 1)
+
+
+async def test_blinded_report_keeps_counts_only(settings: Settings) -> None:
+    report = await run_eval(ROOT / "evals" / "golden", settings)
+    blind = report.blinded()
+    dumped = blind.model_dump_json()
+    assert "residence_tilleuls" not in dumped
+    assert blind.fields == report.fields and blind.strict_f1 == report.strict_f1
+    assert all(not c.misses and not c.extras for c in blind.cases)
 
 
 def _case(name: str, predicted: int, expected: int, correct: int) -> CaseReport:

@@ -37,6 +37,29 @@ class Expected(BaseModel):
     numeric: float | None = None
 
 
+class FieldCounts(BaseModel):
+    """Strict counts for one field, summed into the per-field table."""
+
+    expected: int = 0
+    found: int = 0
+    predicted: int = 0
+    correct: int = 0
+
+    def add(self, other: FieldCounts) -> None:
+        self.expected += other.expected
+        self.found += other.found
+        self.predicted += other.predicted
+        self.correct += other.correct
+
+    @property
+    def misses(self) -> int:
+        return self.expected - self.found
+
+    @property
+    def extras(self) -> int:
+        return self.predicted - self.correct
+
+
 class CaseReport(BaseModel):
     name: str
     predicted: int
@@ -56,6 +79,7 @@ class CaseReport(BaseModel):
     seconds: float
     misses: list[str] = Field(default_factory=list)
     extras: list[str] = Field(default_factory=list)
+    fields: dict[str, FieldCounts] = Field(default_factory=dict)
 
 
 class EvalReport(BaseModel):
@@ -70,6 +94,15 @@ class EvalReport(BaseModel):
     strict_f1: float
     strict_f1_ci: tuple[float, float]
     misses: list[str]
+    fields: dict[str, FieldCounts] = Field(default_factory=dict)
+
+    def blinded(self) -> EvalReport:
+        """Counts only: no case names, values or quotes (for a held-out set)."""
+        cases = [
+            c.model_copy(update={"name": f"case {i}", "misses": [], "extras": []})
+            for i, c in enumerate(self.cases, 1)
+        ]
+        return self.model_copy(update={"cases": cases, "misses": []})
 
 
 def matches(pred: Requirement, exp: Expected, *, strict: bool = False) -> bool:
@@ -123,6 +156,28 @@ def score(
     matched_exp = [e for e in expected if any(matches(p, e, strict=strict) for p in predicted)]
     extras = [p for p in predicted if not any(matches(p, e, strict=strict) for e in expected)]
     return len(matched_exp), [e for e in expected if e not in matched_exp], extras
+
+
+def field_counts(predicted: list[Requirement], expected: list[Expected]) -> dict[str, FieldCounts]:
+    """Strict per-field counts: where recall is lost and where noise comes from."""
+    counts: dict[str, FieldCounts] = {}
+    for exp in expected:
+        c = counts.setdefault(exp.field.value, FieldCounts())
+        c.expected += 1
+        c.found += any(matches(p, exp, strict=True) for p in predicted)
+    for pred in predicted:
+        c = counts.setdefault(pred.field.value, FieldCounts())
+        c.predicted += 1
+        c.correct += any(matches(pred, e, strict=True) for e in expected)
+    return counts
+
+
+def sum_fields(cases: Sequence[CaseReport]) -> dict[str, FieldCounts]:
+    total: dict[str, FieldCounts] = {}
+    for case in cases:
+        for name, counts in case.fields.items():
+            total.setdefault(name, FieldCounts()).add(counts)
+    return dict(sorted(total.items(), key=lambda kv: (-(kv[1].misses + kv[1].extras), kv[0])))
 
 
 def _f1(p: float, r: float) -> float:
@@ -225,6 +280,7 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
                     seconds=analysis.timings.get("total", 0.0),
                     misses=miss_labels,
                     extras=[f"{e.field.value} = {e.value}" for e in extras],
+                    fields=field_counts(predicted, expected),
                 )
             )
             all_misses += miss_labels
@@ -247,4 +303,5 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
         strict_f1=strict_f,
         strict_f1_ci=bootstrap_f1(cases, strict=True),
         misses=all_misses,
+        fields=sum_fields(cases),
     )
