@@ -294,3 +294,13 @@ def test_afnor_references_without_the_nf_prefix_and_cstb_guides() -> None:
     for want in ("20-650", "06.011", "06-006", "Cahier du CSTB 3521", "DTU 37.1"):
         assert want in found, (want, found)
     assert "P24-203" not in found  # the DTU's own AFNOR alias, not another standard
+
+
+def test_marks_with_their_scope_and_acotherm_classes() -> None:
+    reqs = _extract(
+        "Les fermetures bénéficieront de la marque NF, et les volets de la marque NF Fermetures.\n\n"
+        "Profilés sous certification NF/CSTBât, classement Acotherm AC1 Th8 au minimum."
+    )
+    certs = " | ".join(sorted(_values(reqs, F.CERTIFICATIONS)))
+    for want in ("marque NF Fermetures", "NF/CSTBât", "AC1 Th8"):
+        assert want in certs, (want, certs)

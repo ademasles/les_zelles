@@ -639,7 +639,7 @@ RULES: list[Rule] = [
     Rule(
         F.CERTIFICATIONS,
         re.compile(
-            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|marque\s+NF|PEFC|FSC|CEBTP|NF\s+Fermetures?|CSTBat|FDES|certification\s+QB|C\.?E\.?R\.?F\.?F|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
+            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|AC\s?[1-4]\s*[-/]?\s*Th\s?(?:[5-9]|1[0-2])|marque\s+NF(?:\s+Fermetures?)?|PEFC|FSC|CEBTP|NF\s+Fermetures?|(?:NF\s*[/-]\s*)?CSTB[aâ]t|FDES|certification\s+QB|C\.?E\.?R\.?F\.?F|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
             _I,
         ),
         0.85,
