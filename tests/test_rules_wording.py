@@ -330,3 +330,10 @@ def test_thermal_break_said_of_the_joinery() -> None:
     assert all(r.citation and "coffres" not in r.citation.quote for r in profiles)
     only_box = _extract("Les coffres de volets seront à rupture de pont thermique.")
     assert not _values(only_box, F.PROFILE_SYSTEM)
+
+
+def test_white_named_on_the_material() -> None:
+    reqs = _extract("Les menuiseries des façades arrière seront en PVC blanc.")
+    assert any("blanc" in v for v in _values(reqs, F.COLOR))
+    handles = _extract("Poignées en PVC blanc sur toutes les fenêtres.")
+    assert not _values(handles, F.COLOR)  # a handle's colour is not the joinery's
