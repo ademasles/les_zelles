@@ -455,6 +455,17 @@ RULES: list[Rule] = [
         0.65,
         excludes=re.compile(r"\b(?:Sw|Uw|Ug|TLw)\b", _I),  # a performance line, not a shutter spec
     ),
+    Rule(  # box form and drive anywhere in a shutter sentence, even past the clause window
+        F.SHUTTERS,
+        re.compile(
+            r"\b(?:monoblocs?|blocs?[- ]baies?|coffres?\s+(?:tunnels?|demi[- ]linteaux?)|"
+            r"treuils?|sangles?|tringles?|motoris[ée]e?s?|radio|filaires?)\b",
+            _I,
+        ),
+        0.6,
+        requires=_SHUTTER_SUBJECT,
+        excludes=re.compile(r"facteur\s+solaire|\bSw\b|entr[ée]es?\s+d'air", _I),
+    ),
     Rule(  # decorative or fixed shutters, motors, anti-lift locks, named makers
         F.SHUTTERS,
         re.compile(
