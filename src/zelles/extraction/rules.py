@@ -375,7 +375,9 @@ RULES: list[Rule] = [
         F.PROFILE_SYSTEM,
         re.compile(r"\b(?:à\s+)?rupture\s+de\s+pont\s+thermique\b", _I),
         0.65,
-        requires=re.compile(r"profil", _I),  # a property of the profiles themselves
+        # a property of the profiles, said of them or of the joinery made from them
+        requires=re.compile(r"profil|menuiseries?|châssis|fenêtres?|ouvrants?|dormants?", _I),
+        excludes=re.compile(rf"{_SHUTTER_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
     ),
     Rule(
         F.FINISH,

@@ -317,3 +317,16 @@ def test_gas_filling_listed_under_a_glazing_make_up() -> None:
 def test_gas_word_far_from_any_glazing_is_ignored() -> None:
     reqs = _extract("Soudure des renforts sous protection argon en atelier.")
     assert not _values(reqs, F.GLAZING_TYPE)
+
+
+def test_thermal_break_said_of_the_joinery() -> None:
+    reqs = _extract(
+        "Les fenêtres seront en aluminium à rupture de pont thermique.\n\n"
+        "Les coffres de volets seront à rupture de pont thermique."
+    )
+    profiles = [r for r in reqs if r.field == F.PROFILE_SYSTEM]
+    assert any("rupture de pont thermique" in r.value for r in profiles), profiles
+    # the shutter box sentence is not about the profiles
+    assert all(r.citation and "coffres" not in r.citation.quote for r in profiles)
+    only_box = _extract("Les coffres de volets seront à rupture de pont thermique.")
+    assert not _values(only_box, F.PROFILE_SYSTEM)
