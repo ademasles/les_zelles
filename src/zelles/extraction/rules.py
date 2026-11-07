@@ -690,6 +690,31 @@ _EXCLUSION_LEAD = re.compile(
 _HANDLE_POSITION = re.compile(r"\bpositionn[ée]|\bréglementation|\bconformément", _I)
 
 
+# Head words too generic to tell two values apart on their own: "volets battants" and
+# "volets roulants", "pose en tunnel" and "pose en applique" are different requirements.
+_GENERIC_HEADS = frozenset(
+    {"volet", "pose", "posé", "posée"}
+    | {"dan", "sur"}  # location items: "dans les coffres …", "dans les traverses …"
+)
+_FILLERS = frozenset({"en", "de", "du", "des", "la", "le", "les", "l", "d", "sur", "à", "par"})
+
+
+def _slot_word(value: str) -> str:
+    """The word that names a descriptive value within its article.
+
+    Usually the first word, so that "persienne" and "Persienne offrant …" count
+    once; when that word is a generic head, its first qualifier is added.
+    """
+    words: list[str] = [str(w).rstrip("s") for w in re.findall(r"\w+", value.lower())]
+    if not words:
+        return ""
+    head = words[0]
+    if head not in _GENERIC_HEADS:
+        return head
+    qualifier = next((w for w in words[1:] if w not in _FILLERS), "")
+    return f"{head} {qualifier}".strip()
+
+
 _ACCESS_CONTEXT = re.compile(
     r"\bPMR\b|handicap|accessib|mobilité\s+réduite|\d\s*cm\b|ressaut|plan\s+incliné", _I
 )
@@ -840,8 +865,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                 )
                 key = req.dedupe_key()
                 if rule.field in _ONE_PER_ARTICLE:
-                    trigger = re.sub(r"\W", "", value.split()[0].lower()).rstrip("s")
-                    slot = (rule.field, f"{chunk.id}:{trigger}")
+                    slot = (rule.field, f"{chunk.id}:{_slot_word(value)}")
                     previous = per_slot.get(slot)
                     if previous is not None and previous in found:
                         # Keep the most informative value for this sentence.

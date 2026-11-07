@@ -257,3 +257,25 @@ def test_shutter_box_form_and_drive_outside_the_clause_window() -> None:
 def test_shutter_drive_words_need_a_shutter_subject() -> None:
     reqs = _extract("Les menuiseries seront livrées avec une radio de chantier et des sangles.")
     assert not _values(reqs, F.SHUTTERS)
+
+
+def test_generic_heads_keep_distinct_values_in_one_article() -> None:
+    reqs = _extract(
+        "Les baies du rez-de-chaussée recevront des volets battants à lames.\n\n"
+        "Les volets roulants seront à lames aluminium et coffre intérieur isolé.\n\n"
+        "- Pose en applique intérieure avec tapées d'isolation rapportées\n"
+        "- Pose en tunnel pour les baies du rez-de-chaussée"
+    )
+    shutters = " | ".join(_values(reqs, F.SHUTTERS))
+    assert "volets battants" in shutters and "volets roulants" in shutters, shutters
+    installs = " | ".join(_values(reqs, F.INSTALLATION))
+    assert "applique" in installs and "tunnel" in installs, installs
+
+
+def test_inlet_locations_listed_under_an_inlet_article() -> None:
+    reqs = _extract(
+        "Implantation :\n\n- intégrées dans les coffres de VR du séjour\n- intégrées dans les traverses hautes",
+        heading="2.4 Entrées d'air",
+    )
+    inlets = " | ".join(_values(reqs, F.AIR_INLETS))
+    assert "coffres de VR" in inlets and "traverses hautes" in inlets, inlets
