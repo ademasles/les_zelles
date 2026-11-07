@@ -279,3 +279,18 @@ def test_inlet_locations_listed_under_an_inlet_article() -> None:
     )
     inlets = " | ".join(_values(reqs, F.AIR_INLETS))
     assert "coffres de VR" in inlets and "traverses hautes" in inlets, inlets
+
+
+def test_afnor_references_without_the_nf_prefix_and_cstb_guides() -> None:
+    reqs = _extract(
+        "Documents de référence :\n\n"
+        "- XP P 20-650 Fenêtres : pose des ouvrages\n"
+        "- Règles de calcul du vent (D.T.U. P 06.011)\n"
+        "- Règles neige et vent, normes P 06-006 et suivantes\n"
+        "- Cahier du CSTB n° 3521 relatif aux menuiseries\n"
+        "- NF DTU 37.1 (P24-203) : Menuiseries métalliques"
+    )
+    found = " | ".join(sorted(_values(reqs, F.STANDARDS)))
+    for want in ("20-650", "06.011", "06-006", "Cahier du CSTB 3521", "DTU 37.1"):
+        assert want in found, (want, found)
+    assert "P24-203" not in found  # the DTU's own AFNOR alias, not another standard

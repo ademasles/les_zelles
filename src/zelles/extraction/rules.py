@@ -602,6 +602,34 @@ RULES: list[Rule] = [
         normalize=lambda m: f"EN {m.group(0)}",
         in_heading=True,
     ),
+    Rule(  # AFNOR without the NF prefix: "XP P 20-650", "FD P 20-201", "D.T.U. P 06.011"
+        F.STANDARDS,
+        re.compile(
+            r"\b(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?)\s*(?:N°\s*)?[PBASTEX]\s*\.?\s?\d{2}\s?[.\-]\s?\d{3}\b"
+        ),
+        0.85,
+        in_heading=True,
+    ),
+    Rule(  # ...or bare in a reference context: "Règles NV 65 (P 06-011)"
+        F.STANDARDS,
+        re.compile(r"(?<![\w.])(?<!NF )(?<!XP )(?<!FD )[PB]\s?\.?\s?\d{2}\s?[.\-]\s?\d{3}\b"),
+        0.75,
+        requires=re.compile(r"normes?|règles|conformes?|selon|DTU|D\.T\.U", _I),
+        # a prefix of its own, or the AFNOR alias of a DTU just named: "NF DTU 37.1 (P24-203)"
+        before_excludes=re.compile(
+            r"(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?|NF)\s*(?:N°\s*)?$"
+            r"|D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*\s*\(\s*$",
+            _I,
+        ),
+        in_heading=True,
+    ),
+    Rule(  # numbered CSTB guides: "Cahier du CSTB n° 3521", "e-cahier du CSTB 3600"
+        F.STANDARDS,
+        re.compile(r"\b(?:e-?\s?)?cahiers?\s+(?:du\s+)?CSTB\s*(?:n\s*[°º]\s*)?(\d{4})\b", _I),
+        0.8,
+        normalize=lambda m: f"Cahier du CSTB {m.group(1)}",
+        in_heading=True,
+    ),
     Rule(  # snow and wind rules
         F.STANDARDS,
         re.compile(r"\bN\.?\s?V\.?\s?65\b|\b(?<!R)N\s?84\b"),
