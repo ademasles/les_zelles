@@ -1,5 +1,8 @@
+from typing import Any
+
 from zelles.config import Settings
 from zelles.domain.spec import RequirementStatus, SpecField
+from zelles.llm.base import Message
 from zelles.llm.fake import FakeLLM, HashEmbedder
 from zelles.pipeline import analyze
 
@@ -45,3 +48,35 @@ async def test_hybrid_search_prefers_relevant_passage(
     hits = await analysis.index.search("volets roulants motorisation", k=3)
     assert hits[0].chunk.heading == "4.1 Volets roulants"
     assert hits[0].lexical_rank == 0
+
+
+GAP_DOC = (
+    "# Lot 05 Menuiseries extérieures\n\n## 1 Généralités\n\n"
+    "Les menuiseries extérieures seront en PVC. Ouverture OB pour toutes les fenêtres.\n"
+).encode()
+
+
+def gap_responder(system: str, messages: list[Message], schema: type[Any] | None) -> Any:
+    prompt = messages[-1].content
+    assert "- frame_material:" not in prompt  # the rules already found it
+    items = []
+    if "- opening_type:" in prompt:
+        quote = "Ouverture OB pour toutes les fenêtres"
+        items.append({"field": "opening_type", "value": "OB", "chunk_id": "c0000", "quote": quote})
+    if "- security_class:" in prompt:  # a hallucination: no such sentence
+        quote = "Les fenêtres seront de classe RC3"
+        items.append(
+            {"field": "security_class", "value": "RC3", "chunk_id": "c0000", "quote": quote}
+        )
+    return {"items": items}
+
+
+async def test_gap_mode_asks_only_missing_fields_and_keeps_grounded_values(
+    settings: Settings,
+) -> None:
+    llm = FakeLLM(gap_responder)
+    gaps = settings.model_copy(update={"llm_mode": "gaps"})
+    analysis = await analyze(GAP_DOC, "cctp.md", settings=gaps, llm=llm, summarize=False)
+    reqs = {(r.field, r.value): r for r in analysis.sheet.requirements}
+    assert set(reqs) == {(SpecField.FRAME_MATERIAL, "PVC"), (SpecField.OPENING_TYPE, "OB")}
+    assert all(r.status == RequirementStatus.VERIFIED for r in reqs.values())

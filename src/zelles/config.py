@@ -49,6 +49,12 @@ class Settings(BaseSettings):
         description="Seconds to wait for one LLM reply. Defaults to 600 for local servers, "
         "180 for cloud APIs.",
     )
+    llm_mode: Literal["full", "gaps"] = Field(
+        default="full",
+        description="'full' asks the LLM for every field and merges its values with the "
+        "rules. 'gaps' asks only for fields the rules found nothing for, and keeps only "
+        "LLM values whose quote and value are verified in the source.",
+    )
     llm_max_retries: int = 2
     llm_concurrency: int = Field(
         default=2, description="Parallel LLM calls. Use 1 for a single local GPU."

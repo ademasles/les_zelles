@@ -43,6 +43,12 @@ FIELD_GROUPS: dict[str, list[SpecField]] = {
     "compliance": [F.STANDARDS, F.CERTIFICATIONS, F.REGULATION],
 }
 
+
+def gap_fields(candidates: list[Requirement]) -> set[SpecField]:
+    """Fields the rules found nothing for: the only ones worth an LLM call in gap mode."""
+    return set(SpecField) - {c.field for c in candidates}
+
+
 # Below this size the whole document goes into the (cached) system prompt.
 WHOLE_DOCUMENT_CHARS = 24_000
 MAX_CONTEXT_CHARS = 14_000
@@ -88,8 +94,17 @@ class LLMExtractor:
             self.max_context_chars = max(2_000, min(MAX_CONTEXT_CHARS, room))
 
     async def extract(
-        self, index: DocumentIndex, candidates: list[Requirement]
+        self,
+        index: DocumentIndex,
+        candidates: list[Requirement],
+        *,
+        only: set[SpecField] | None = None,
     ) -> list[GroupOutcome]:
+        """Run one call per field group; ``only`` restricts the fields asked for."""
+        groups = {
+            name: [f for f in fields if only is None or f in only]
+            for name, fields in FIELD_GROUPS.items()
+        }
         total_chars = sum(len(c.text) for c in index.chunks)
         whole = total_chars <= self.whole_document_chars
         system = EXTRACTION_SYSTEM
@@ -97,7 +112,8 @@ class LLMExtractor:
             system += "\n\nSOURCE DOCUMENT\n\n" + format_passages(index.chunks)
         tasks = [
             self._run_group(name, fields, index, candidates, system=system, whole=whole)
-            for name, fields in FIELD_GROUPS.items()
+            for name, fields in groups.items()
+            if fields
         ]
         return list(await asyncio.gather(*tasks))
 

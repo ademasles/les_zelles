@@ -23,7 +23,7 @@ from zelles.domain.spec import (
     SpecSheet,
     Usage,
 )
-from zelles.extraction.llm_extractor import LLMExtractor
+from zelles.extraction.llm_extractor import LLMExtractor, gap_fields
 from zelles.extraction.merge import merge_requirements
 from zelles.extraction.prompts import SUMMARY_SYSTEM
 from zelles.extraction.rules import extract_with_rules
@@ -104,13 +104,15 @@ async def analyze(
     usage = Usage(cost_usd=0.0 if llm is None else None)
     warnings = list(document.warnings)
     llm_reqs: list[Requirement] = []
-    if llm is not None:
+    gaps_only = settings.llm_mode == "gaps"
+    only = gap_fields(rule_reqs) if gaps_only else None
+    if llm is not None and only != set():
         await progress("llm", 0.5, f"Reading the specification with {llm.name}")
         t = time.perf_counter()
         extractor = LLMExtractor(
             llm, top_k=settings.retrieval_top_k, concurrency=settings.llm_concurrency
         )
-        for outcome in await extractor.extract(index, rule_reqs):
+        for outcome in await extractor.extract(index, rule_reqs, only=only):
             usage.add(outcome.usage)
             llm_reqs.extend(outcome.requirements)
             if outcome.error:
@@ -120,6 +122,8 @@ async def analyze(
     await progress("verify", 0.85, "Checking every value against the source")
     by_id = {c.id: c for c in chunks}
     verified = [verify_requirement(r, by_id) for r in llm_reqs]
+    if gaps_only:  # a gap filler must not add noise: grounded values only
+        verified = [r for r in verified if r.status == RequirementStatus.VERIFIED]
     requirements = merge_requirements(rule_reqs, verified)
 
     sheet = SpecSheet(
