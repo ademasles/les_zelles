@@ -257,3 +257,100 @@ def test_shutter_box_form_and_drive_outside_the_clause_window() -> None:
 def test_shutter_drive_words_need_a_shutter_subject() -> None:
     reqs = _extract("Les menuiseries seront livrées avec une radio de chantier et des sangles.")
     assert not _values(reqs, F.SHUTTERS)
+
+
+def test_generic_heads_keep_distinct_values_in_one_article() -> None:
+    reqs = _extract(
+        "Les baies du rez-de-chaussée recevront des volets battants à lames.\n\n"
+        "Les volets roulants seront à lames aluminium et coffre intérieur isolé.\n\n"
+        "- Pose en applique intérieure avec tapées d'isolation rapportées\n"
+        "- Pose en tunnel pour les baies du rez-de-chaussée"
+    )
+    shutters = " | ".join(_values(reqs, F.SHUTTERS))
+    assert "volets battants" in shutters and "volets roulants" in shutters, shutters
+    installs = " | ".join(_values(reqs, F.INSTALLATION))
+    assert "applique" in installs and "tunnel" in installs, installs
+
+
+def test_inlet_locations_listed_under_an_inlet_article() -> None:
+    reqs = _extract(
+        "Implantation :\n\n- intégrées dans les coffres de VR du séjour\n- intégrées dans les traverses hautes",
+        heading="2.4 Entrées d'air",
+    )
+    inlets = " | ".join(_values(reqs, F.AIR_INLETS))
+    assert "coffres de VR" in inlets and "traverses hautes" in inlets, inlets
+
+
+def test_afnor_references_without_the_nf_prefix_and_cstb_guides() -> None:
+    reqs = _extract(
+        "Documents de référence :\n\n"
+        "- XP P 20-650 Fenêtres : pose des ouvrages\n"
+        "- Règles de calcul du vent (D.T.U. P 06.011)\n"
+        "- Règles neige et vent, normes P 06-006 et suivantes\n"
+        "- Cahier du CSTB n° 3521 relatif aux menuiseries\n"
+        "- NF DTU 37.1 (P24-203) : Menuiseries métalliques"
+    )
+    found = " | ".join(sorted(_values(reqs, F.STANDARDS)))
+    for want in ("20-650", "06.011", "06-006", "Cahier du CSTB 3521", "DTU 37.1"):
+        assert want in found, (want, found)
+    assert "P24-203" not in found  # the DTU's own AFNOR alias, not another standard
+
+
+def test_marks_with_their_scope_and_acotherm_classes() -> None:
+    reqs = _extract(
+        "Les fermetures bénéficieront de la marque NF, et les volets de la marque NF Fermetures.\n\n"
+        "Profilés sous certification NF/CSTBât, classement Acotherm AC1 Th8 au minimum."
+    )
+    certs = " | ".join(sorted(_values(reqs, F.CERTIFICATIONS)))
+    for want in ("marque NF Fermetures", "NF/CSTBât", "AC1 Th8"):
+        assert want in certs, (want, certs)
+
+
+def test_gas_filling_listed_under_a_glazing_make_up() -> None:
+    reqs = _extract(
+        "Composition des doubles vitrages :\n\n- Verre extérieur de 4 mm\n- Gaz krypton entre les verres"
+    )
+    types = " | ".join(_values(reqs, F.GLAZING_TYPE)).lower()
+    assert "krypton" in types, types
+
+
+def test_gas_word_far_from_any_glazing_is_ignored() -> None:
+    reqs = _extract("Soudure des renforts sous protection argon en atelier.")
+    assert not _values(reqs, F.GLAZING_TYPE)
+
+
+def test_thermal_break_said_of_the_joinery() -> None:
+    reqs = _extract(
+        "Les fenêtres seront en aluminium à rupture de pont thermique.\n\n"
+        "Les coffres de volets seront à rupture de pont thermique."
+    )
+    profiles = [r for r in reqs if r.field == F.PROFILE_SYSTEM]
+    assert any("rupture de pont thermique" in r.value for r in profiles), profiles
+    # the shutter box sentence is not about the profiles
+    assert all(r.citation and "coffres" not in r.citation.quote for r in profiles)
+    only_box = _extract("Les coffres de volets seront à rupture de pont thermique.")
+    assert not _values(only_box, F.PROFILE_SYSTEM)
+
+
+def test_white_named_on_the_material() -> None:
+    reqs = _extract("Les menuiseries des façades arrière seront en PVC blanc.")
+    assert any("blanc" in v for v in _values(reqs, F.COLOR))
+    handles = _extract("Poignées en PVC blanc sur toutes les fenêtres.")
+    assert not _values(handles, F.COLOR)  # a handle's colour is not the joinery's
+
+
+def test_shutter_maker_named_under_a_shutter_heading() -> None:
+    reqs = _extract(
+        "Les volets pleins seront fournis de chez Menuisol, finition lasurée.",
+        heading="2.6 Volets battants",
+    )
+    assert "Menuisol" in _values(reqs, F.SHUTTERS)
+    elsewhere = _extract("Fourniture de joints de chez Menuisol pour les dormants.")
+    assert not _values(elsewhere, F.SHUTTERS)
+
+
+def test_glazing_unit_total_thickness() -> None:
+    reqs = _extract("Vitrage isolant de 28 mm d'épaisseur pour les baies du séjour.")
+    assert "28 mm" in _values(reqs, F.GLAZING_COMPOSITION)
+    gap = _extract("Double vitrage avec une lame d'air de 16 mm d'épaisseur.")
+    assert "16 mm" not in _values(gap, F.GLAZING_COMPOSITION)  # the gap, not the unit

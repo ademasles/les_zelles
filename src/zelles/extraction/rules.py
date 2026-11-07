@@ -230,7 +230,7 @@ RULES: list[Rule] = [
     Rule(
         F.COLOR,
         re.compile(
-            r"\b(?:teinte|coloris|couleur|finition)\s*:?\s*(?:blanc(?:he)?|gris(?:\s+(?:anthracite|clair|foncé))?|noir|beige|ivoire|sable|chêne\s+doré|ton\s+bois)\b(?:\s+(?:mat|satiné|brillant|sablé|texturé))?|\b(?:PVC\s+)?blanc(?=\s+teinté\s+dans\s+la\s+masse)|\bgris\s+anthracite\b|\bcanon\s+de\s+fusil\b",
+            r"\b(?:teinte|coloris|couleur|finition)\s*:?\s*(?:blanc(?:he)?|gris(?:\s+(?:anthracite|clair|foncé))?|noir|beige|ivoire|sable|chêne\s+doré|ton\s+bois)\b(?:\s+(?:mat|satiné|brillant|sablé|texturé))?|\b(?:PVC\s+)?blanc(?=\s+teinté\s+dans\s+la\s+masse)|\bPVC\s+blanc\b|\bgris\s+anthracite\b|\bcanon\s+de\s+fusil\b",
             _I,
         ),
         0.7,
@@ -251,6 +251,13 @@ RULES: list[Rule] = [
         re.compile(r"(?<![\w.])\d{1,2}\.(?:[6-9]|1\d|2[0-4])\.\d{1,2}(?![\w.])"),
         0.7,
         requires=re.compile(r"vitrage|verre|glace", _I),
+    ),
+    Rule(  # the unit's total thickness: "vitrage isolant de 28 mm d'épaisseur"
+        F.GLAZING_COMPOSITION,
+        re.compile(r"(?<![\w.,])(\d{2})\s*mm\s+d'épaisseur\b", _I),
+        0.65,
+        before_requires=re.compile(r"vitrages?(?:\s+isolants?)?\s*(?:\(|de\s+|:)?\s*$", _I),
+        normalize=lambda m: f"{m.group(1)} mm",
     ),
     Rule(  # "442+16+442": laminated panes written with plus signs
         F.GLAZING_COMPOSITION,
@@ -275,6 +282,12 @@ RULES: list[Rule] = [
         0.7,
         requires=_GLASS_SUBJECT,
         excludes=re.compile(r"\bRAL\b|teinte|coloris", _I),
+    ),
+    Rule(  # the gas filling as an item of a glazing make-up: "- Gaz argon entre les verres"
+        F.GLAZING_TYPE,
+        re.compile(r"\b(?:remplissage\s+|lame\s+d'|gaz\s+)?(?:argon|krypton)\b", _I),
+        0.65,
+        before_requires=_GLASS_SUBJECT,
     ),
     Rule(
         F.SAFETY_GLAZING,
@@ -369,7 +382,9 @@ RULES: list[Rule] = [
         F.PROFILE_SYSTEM,
         re.compile(r"\b(?:à\s+)?rupture\s+de\s+pont\s+thermique\b", _I),
         0.65,
-        requires=re.compile(r"profil", _I),  # a property of the profiles themselves
+        # a property of the profiles, said of them or of the joinery made from them
+        requires=re.compile(r"profil|menuiseries?|châssis|fenêtres?|ouvrants?|dormants?", _I),
+        excludes=re.compile(rf"{_SHUTTER_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
     ),
     Rule(
         F.FINISH,
@@ -480,6 +495,14 @@ RULES: list[Rule] = [
         0.6,
         requires=_SHUTTER_SUBJECT,
         excludes=re.compile(rf"{_HARDWARE_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
+    ),
+    Rule(  # a maker named under a shutter heading: "volets pleins de chez Dupont"
+        F.SHUTTERS,
+        re.compile(r"\bde\s+chez\s+((?-i:[A-Z][a-zà-ÿ]+|[A-Z]{3,}))\b", _I),
+        0.6,
+        heading_requires=re.compile(r"volets?|persiennes?|stores?|fermetures?", _I),
+        excludes=re.compile(rf"{_HARDWARE_SUBJECT.pattern}|{_GLASS_SUBJECT.pattern}", _I),
+        normalize=lambda m: m.group(1),
     ),
     Rule(  # where the inlets go: "entrées d'air … dans les coffres de volets roulants"
         F.AIR_INLETS,
@@ -602,6 +625,34 @@ RULES: list[Rule] = [
         normalize=lambda m: f"EN {m.group(0)}",
         in_heading=True,
     ),
+    Rule(  # AFNOR without the NF prefix: "XP P 20-650", "FD P 20-201", "D.T.U. P 06.011"
+        F.STANDARDS,
+        re.compile(
+            r"\b(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?)\s*(?:N°\s*)?[PBASTEX]\s*\.?\s?\d{2}\s?[.\-]\s?\d{3}\b"
+        ),
+        0.85,
+        in_heading=True,
+    ),
+    Rule(  # ...or bare in a reference context: "Règles NV 65 (P 06-011)"
+        F.STANDARDS,
+        re.compile(r"(?<![\w.])(?<!NF )(?<!XP )(?<!FD )[PB]\s?\.?\s?\d{2}\s?[.\-]\s?\d{3}\b"),
+        0.75,
+        requires=re.compile(r"normes?|règles|conformes?|selon|DTU|D\.T\.U", _I),
+        # a prefix of its own, or the AFNOR alias of a DTU just named: "NF DTU 37.1 (P24-203)"
+        before_excludes=re.compile(
+            r"(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?|NF)\s*(?:N°\s*)?$"
+            r"|D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*\s*\(\s*$",
+            _I,
+        ),
+        in_heading=True,
+    ),
+    Rule(  # numbered CSTB guides: "Cahier du CSTB n° 3521", "e-cahier du CSTB 3600"
+        F.STANDARDS,
+        re.compile(r"\b(?:e-?\s?)?cahiers?\s+(?:du\s+)?CSTB\s*(?:n\s*[°º]\s*)?(\d{4})\b", _I),
+        0.8,
+        normalize=lambda m: f"Cahier du CSTB {m.group(1)}",
+        in_heading=True,
+    ),
     Rule(  # snow and wind rules
         F.STANDARDS,
         re.compile(r"\bN\.?\s?V\.?\s?65\b|\b(?<!R)N\s?84\b"),
@@ -611,7 +662,7 @@ RULES: list[Rule] = [
     Rule(
         F.CERTIFICATIONS,
         re.compile(
-            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|marque\s+NF|PEFC|FSC|CEBTP|NF\s+Fermetures?|CSTBat|FDES|certification\s+QB|C\.?E\.?R\.?F\.?F|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
+            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|AC\s?[1-4]\s*[-/]?\s*Th\s?(?:[5-9]|1[0-2])|marque\s+NF(?:\s+Fermetures?)?|PEFC|FSC|CEBTP|NF\s+Fermetures?|(?:NF\s*[/-]\s*)?CSTB[aâ]t|FDES|certification\s+QB|C\.?E\.?R\.?F\.?F|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
             _I,
         ),
         0.85,
@@ -688,6 +739,31 @@ _EXCLUSION_LEAD = re.compile(
 )
 # The handle's position is an accessibility rule, not a hardware spec.
 _HANDLE_POSITION = re.compile(r"\bpositionn[ée]|\bréglementation|\bconformément", _I)
+
+
+# Head words too generic to tell two values apart on their own: "volets battants" and
+# "volets roulants", "pose en tunnel" and "pose en applique" are different requirements.
+_GENERIC_HEADS = frozenset(
+    {"volet", "pose", "posé", "posée"}
+    | {"dan", "sur"}  # location items: "dans les coffres …", "dans les traverses …"
+)
+_FILLERS = frozenset({"en", "de", "du", "des", "la", "le", "les", "l", "d", "sur", "à", "par"})
+
+
+def _slot_word(value: str) -> str:
+    """The word that names a descriptive value within its article.
+
+    Usually the first word, so that "persienne" and "Persienne offrant …" count
+    once; when that word is a generic head, its first qualifier is added.
+    """
+    words: list[str] = [str(w).rstrip("s") for w in re.findall(r"\w+", value.lower())]
+    if not words:
+        return ""
+    head = words[0]
+    if head not in _GENERIC_HEADS:
+        return head
+    qualifier = next((w for w in words[1:] if w not in _FILLERS), "")
+    return f"{head} {qualifier}".strip()
 
 
 _ACCESS_CONTEXT = re.compile(
@@ -840,8 +916,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                 )
                 key = req.dedupe_key()
                 if rule.field in _ONE_PER_ARTICLE:
-                    trigger = re.sub(r"\W", "", value.split()[0].lower()).rstrip("s")
-                    slot = (rule.field, f"{chunk.id}:{trigger}")
+                    slot = (rule.field, f"{chunk.id}:{_slot_word(value)}")
                     previous = per_slot.get(slot)
                     if previous is not None and previous in found:
                         # Keep the most informative value for this sentence.
