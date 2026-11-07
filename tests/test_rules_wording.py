@@ -304,3 +304,16 @@ def test_marks_with_their_scope_and_acotherm_classes() -> None:
     certs = " | ".join(sorted(_values(reqs, F.CERTIFICATIONS)))
     for want in ("marque NF Fermetures", "NF/CSTBât", "AC1 Th8"):
         assert want in certs, (want, certs)
+
+
+def test_gas_filling_listed_under_a_glazing_make_up() -> None:
+    reqs = _extract(
+        "Composition des doubles vitrages :\n\n- Verre extérieur de 4 mm\n- Gaz krypton entre les verres"
+    )
+    types = " | ".join(_values(reqs, F.GLAZING_TYPE)).lower()
+    assert "krypton" in types, types
+
+
+def test_gas_word_far_from_any_glazing_is_ignored() -> None:
+    reqs = _extract("Soudure des renforts sous protection argon en atelier.")
+    assert not _values(reqs, F.GLAZING_TYPE)

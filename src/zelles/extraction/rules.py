@@ -276,6 +276,12 @@ RULES: list[Rule] = [
         requires=_GLASS_SUBJECT,
         excludes=re.compile(r"\bRAL\b|teinte|coloris", _I),
     ),
+    Rule(  # the gas filling as an item of a glazing make-up: "- Gaz argon entre les verres"
+        F.GLAZING_TYPE,
+        re.compile(r"\b(?:remplissage\s+|lame\s+d'|gaz\s+)?(?:argon|krypton)\b", _I),
+        0.65,
+        before_requires=_GLASS_SUBJECT,
+    ),
     Rule(
         F.SAFETY_GLAZING,
         re.compile(
