@@ -80,3 +80,5 @@ async def test_gap_mode_asks_only_missing_fields_and_keeps_grounded_values(
     reqs = {(r.field, r.value): r for r in analysis.sheet.requirements}
     assert set(reqs) == {(SpecField.FRAME_MATERIAL, "PVC"), (SpecField.OPENING_TYPE, "OB")}
     assert all(r.status == RequirementStatus.VERIFIED for r in reqs.values())
+    prompts = " ".join(m.content for _, msgs in llm.calls for m in msgs)
+    assert "- standards:" in prompts  # open list: asked even when the rules find some

@@ -133,7 +133,7 @@ All settings are environment variables prefixed `ZELLES_` (or a `.env` file). Se
 | `ZELLES_LLM_MODEL` | `none` | `provider:model`, e.g. `ollama:qwen3:8b`, `anthropic:claude-sonnet-5-5` |
 | `ZELLES_EMBEDDING_MODEL` | `none` | `none` means BM25 only; `ollama:bge-m3` adds dense retrieval |
 | `ZELLES_LLM_CONCURRENCY` | `2` | Use `1` on a single local GPU |
-| `ZELLES_LLM_MODE` | `full` | `gaps`: ask the LLM only for fields the rules missed, keep verified values only |
+| `ZELLES_LLM_MODE` | `full` | `gaps`: ask the LLM only for fields the rules missed and open lists (standards, regulation, certifications, profile systems); keep verified values only |
 | `ZELLES_DATABASE_URL` | SQLite in `data/` | Any SQLAlchemy URL; migrations run on startup |
 | `ZELLES_API_KEY` | unset | Protects the API when set |
 | `ZELLES_OCR_ENABLED` | `true` | OCR for scanned pages (Tesseract, else Docling) |

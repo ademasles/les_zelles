@@ -44,9 +44,14 @@ FIELD_GROUPS: dict[str, list[SpecField]] = {
 }
 
 
+# Open-vocabulary lists (any standard, decree or product range may be cited): rules
+# find the usual ones, so a hit does not mean the field is complete.
+OPEN_FIELDS = frozenset({F.STANDARDS, F.REGULATION, F.CERTIFICATIONS, F.PROFILE_SYSTEM})
+
+
 def gap_fields(candidates: list[Requirement]) -> set[SpecField]:
-    """Fields the rules found nothing for: the only ones worth an LLM call in gap mode."""
-    return set(SpecField) - {c.field for c in candidates}
+    """Fields worth an LLM call in gap mode: open lists, and fields the rules missed."""
+    return (set(SpecField) - {c.field for c in candidates}) | OPEN_FIELDS
 
 
 # Below this size the whole document goes into the (cached) system prompt.
