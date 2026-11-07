@@ -42,6 +42,12 @@ def test_strict_match_ignores_the_quote() -> None:
     assert matches(clean, expected, strict=True)
 
 
+def test_strict_match_ignores_gender_agreement() -> None:
+    expected = Expected(field=SpecField.FINISH, value="teintées dans la masse")
+    assert matches(_req("teinté dans la masse", "PVC teinté dans la masse"), expected, strict=True)
+    assert not matches(_req("teinte grise", "teinte grise"), expected, strict=True)
+
+
 def test_field_counts_split_misses_and_extras() -> None:
     expected = [
         Expected(field=SpecField.FINISH, value="RAL 9016"),
