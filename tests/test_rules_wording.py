@@ -354,3 +354,53 @@ def test_glazing_unit_total_thickness() -> None:
     assert "28 mm" in _values(reqs, F.GLAZING_COMPOSITION)
     gap = _extract("Double vitrage avec une lame d'air de 16 mm d'épaisseur.")
     assert "16 mm" not in _values(gap, F.GLAZING_COMPOSITION)  # the gap, not the unit
+
+
+def test_unit_m2_is_no_fire_class() -> None:
+    reqs = _extract(
+        "Réaction au feu : les panneaux auront une résistance thermique R ≥ 2 M2.K/W.",
+        heading="3 Sécurité incendie",
+    )
+    assert "M2" not in _values(reqs, F.CERTIFICATIONS)
+    fire = _extract("Les menuiseries PVC seront classées M1.", heading="3 Sécurité incendie")
+    assert "M1" in " ".join(_values(fire, F.CERTIFICATIONS))
+
+
+def test_frame_material_ignores_hinges_added_frames_and_interior_joinery() -> None:
+    for text in (
+        "Les paumelles des fenêtres seront en aluminium.",
+        "Bâti bois rapporté autour des châssis existants.",
+        "Les menuiseries intérieures seront en bois.",
+    ):
+        assert not _values(_extract(text), F.FRAME_MATERIAL), text
+    assert _values(_extract("Les fenêtres seront en aluminium."), F.FRAME_MATERIAL)
+
+
+def test_opaque_wall_is_no_glazing() -> None:
+    assert not _values(
+        _extract("Remplissage du châssis par une paroi opaque sous le vitrage."), F.GLAZING_TYPE
+    )
+    assert _values(_extract("Vitrage opaque pour les salles de bains."), F.GLAZING_TYPE)
+
+
+def test_panic_device_bolt_is_no_opening_type() -> None:
+    reqs = _extract("Les portes recevront un dispositif anti-panique à pêne coulissant.")
+    assert not _values(reqs, F.OPENING_TYPE)
+
+
+def test_safety_stay_keeps_its_qualifier() -> None:
+    reqs = _extract("Les ouvrants à soufflet seront équipés de compas de sécurité.")
+    assert "compas de sécurité" in _values(reqs, F.HARDWARE)
+
+
+def test_standard_family_without_number_is_no_reference() -> None:
+    found = _values(_extract("Normes de la série NF.P 26 et norme NF P 20-302."), F.STANDARDS)
+    assert any("20" in v and "302" in v for v in found), found
+    assert not any(v.replace(".", " ").split()[-1] == "26" for v in found), found
+
+
+def test_glass_set_in_a_rebate_is_no_installation() -> None:
+    glass = _extract("Le vitrage sera posé en feuillure avec parcloses clippées.")
+    assert not _values(glass, F.INSTALLATION)
+    frame = _extract("Les fenêtres seront posées en feuillure de maçonnerie.")
+    assert _values(frame, F.INSTALLATION)

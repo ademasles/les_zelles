@@ -276,7 +276,7 @@ RULES: list[Rule] = [
     Rule(  # obscured or special glass, the gas filling, a named float glass
         F.GLAZING_TYPE,
         re.compile(
-            r"\b(?:verre\s+|vitrage\s+)?(?:sablé|dépoli|translucide|imprimé|granité|opaque|occultant)\b|\b(?:remplissage\s+|lame\s+d'|gaz\s+)?argon\b|\bpeu\s+émissif\b|\bisolation\s+thermique\s+renforcée\b|\bplanilux\b",
+            r"\b(?:verre\s+|vitrage\s+)?(?:sablé|dépoli|translucide|imprimé|granité|(?<!paroi\s)(?<!parois\s)opaque|occultant)\b|\b(?:remplissage\s+|lame\s+d'|gaz\s+)?argon\b|\bpeu\s+émissif\b|\bisolation\s+thermique\s+renforcée\b|\bplanilux\b",
             _I,
         ),
         0.7,
@@ -334,7 +334,9 @@ RULES: list[Rule] = [
         0.6,
         requires=re.compile(r"menuiserie|fenêtre|porte|châssis|ensemble vitré|ouvrant", _I),
         excludes=re.compile(
-            rf"volet|lame|poignée|renfort|coffre|grille|{_STANDARD_TITLE.pattern}", _I
+            rf"volet|lame|poignée|renfort|coffre|grille|paumelle|charnière|\bbâtis?\b"
+            rf"|menuiseries?\s+intérieures?|{_STANDARD_TITLE.pattern}",
+            _I,
         ),
         normalize=_material,
     ),
@@ -353,7 +355,8 @@ RULES: list[Rule] = [
         0.7,
         # a standard's title or the removal of the old windows is not the new opening type
         excludes=re.compile(
-            r"\b(?:NF\s+)?(?:DTU|EN)\s?\d|\bdépose|\banciens?\b|\banciennes?\b", _I
+            r"\b(?:NF\s+)?(?:DTU|EN)\s?\d|\bdépose|\banciens?\b|\banciennes?\b|anti-?\s?paniques?",
+            _I,
         ),
     ),
     Rule(  # "type … ou équivalent" names a profile only when the subject is a profile/window
@@ -439,7 +442,7 @@ RULES: list[Rule] = [
     Rule(  # further hardware named in a fitting list
         F.HARDWARE,
         re.compile(
-            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|compas(?:\s+limiteurs?)?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette)\b",
+            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette)\b",
             _I,
         ),
         0.6,
@@ -575,12 +578,18 @@ RULES: list[Rule] = [
     Rule(
         F.INSTALLATION,
         re.compile(
-            r"\bpos(?:e|ée?s?)\s+en\s+(?:applique|tunnel|feuillure|rénovation)[^.;,\n]{0,40}|\bdépose\s+(?:des?\s+)?(?:menuiseries|châssis|fenêtres|ouvrages)\s+existant(?:e?s)?\b|\bdépose\s+(?:du\s+ou\s+des|des?|du)\s+(?:vantaux|ouvrants?|dormants?)\b|\b(?:menuiseries?|fenêtres?|châssis)\s+(?:PVC\s+|aluminium\s+|bois\s+)?de\s+rénovation\b|\bdépose\s+totale\b|\bsur\s+dormant\s+existant\b",
+            r"\bpos(?:e|ée?s?)\s+en\s+(?:applique|tunnel|rénovation)[^.;,\n]{0,40}|\bdépose\s+(?:des?\s+)?(?:menuiseries|châssis|fenêtres|ouvrages)\s+existant(?:e?s)?\b|\bdépose\s+(?:du\s+ou\s+des|des?|du)\s+(?:vantaux|ouvrants?|dormants?)\b|\b(?:menuiseries?|fenêtres?|châssis)\s+(?:PVC\s+|aluminium\s+|bois\s+)?de\s+rénovation\b|\bdépose\s+totale\b|\bsur\s+dormant\s+existant\b",
             _I,
         ),
         0.75,
         # a standard's title in a reference list: "DTU 37.2 : … en rénovation sur dormant existant"
         excludes=re.compile(r"\bD\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?\s*[:/–]", _I),
+    ),
+    Rule(  # rebate fixing of the frame; glass set in a rebate is glazing, not installation
+        F.INSTALLATION,
+        re.compile(r"\bpos(?:e|ée?s?)\s+en\s+feuillures?[^.;,\n]{0,40}", _I),
+        0.7,
+        excludes=re.compile(rf"{_GLASS_SUBJECT.pattern}|\bprofilés?\b", _I),
     ),
     Rule(  # short, typed installation details; no free-text caulking sentences
         F.INSTALLATION,
@@ -602,7 +611,7 @@ RULES: list[Rule] = [
     Rule(  # AFNOR: "NF DTU 36.5", "NF EN 14351-1", "NF.P 08.322", "N.F. P 26 102", "NFP 01-010"
         F.STANDARDS,
         re.compile(
-            r"\b(?:NF|N\.\s?F\.)\s*\.?\s*(?:D\.?\s?T\.?\s?U\.?|EN(?:\s+ISO)?|[PBASTEX])\s*\.?\s?\d{1,5}(?:\s?[.\-]\s?\d{1,4}|\s\d{3}\b)*(?:\s+P\d-\d)?\b"
+            r"\b(?:NF|N\.\s?F\.)\s*\.?\s*(?:(?:D\.?\s?T\.?\s?U\.?|EN(?:\s+ISO)?)\s*\.?\s?\d{1,5}|[PBASTEX]\s*\.?\s?(?:\d{3,5}|\d{1,2}(?=\s?[.\-]\s?\d|\s\d{3}\b)))(?:\s?[.\-]\s?\d{1,4}|\s\d{3}\b)*(?:\s+P\d-\d)?\b"
         ),
         0.9,
         in_heading=True,
@@ -669,7 +678,7 @@ RULES: list[Rule] = [
     ),
     Rule(  # fire reaction class under a fire heading: "Les menuiseries PVC sont M1 ou M2"
         F.CERTIFICATIONS,
-        re.compile(r"\bM[0-4]\b"),
+        re.compile(r"(?<![/.])\bM[0-4]\b(?!\s*[.·]?\s*K\b|\s*/)"),  # not the unit "M2.K/W"
         0.7,
         context_requires=re.compile(r"\bfeu\b|incendie", _I),
     ),
