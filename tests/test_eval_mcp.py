@@ -48,6 +48,14 @@ def test_strict_match_ignores_gender_agreement() -> None:
     assert not matches(_req("teinte grise", "teinte grise"), expected, strict=True)
 
 
+def test_strict_match_ignores_code_dots_and_spelling_variants() -> None:
+    nv = Expected(field=SpecField.FINISH, value="NV 65")
+    assert matches(_req("Règles NV.65", "Règles NV.65"), nv, strict=True)
+    assert not matches(_req("NV 84", "NV 84"), nv, strict=True)
+    limiter = Expected(field=SpecField.FINISH, value="limiteur de débattement")
+    assert matches(_req("limitateur de débattement", "x"), limiter, strict=True)
+
+
 def test_field_counts_split_misses_and_extras() -> None:
     expected = [
         Expected(field=SpecField.FINISH, value="RAL 9016"),

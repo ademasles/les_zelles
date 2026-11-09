@@ -129,6 +129,10 @@ _DIGIT_SEP = re.compile(r"(?<=\d)(?:\s*[.\-]\s*|,|\s+)(?=\d)")  # "20.501" = "20
 _UNIT_GLUE = re.compile(r"(?<=\d)(?=[a-z])")  # "37dB" = "37 dB"
 _PLURAL = re.compile(r"\b([a-z]{4,})s\b")  # "thermolaqués" = "thermolaqué"
 _FEMININE = re.compile(r"\b([a-z]{3,}e)e\b")  # "teintée" = "teinté" (accents already folded)
+_LETTER_DOT_DIGIT = re.compile(r"(?<=[a-z])\.(?=\d)")  # "NV.65" = "NV 65"
+# Spelling variants of one word, not synonyms: the requirement must be the same.
+_VARIANTS = {"limitateur": "limiteur"}
+_VARIANT = re.compile(r"\b(" + "|".join(_VARIANTS) + r")\b")
 
 
 def _comparable(text: str) -> str:
@@ -136,7 +140,8 @@ def _comparable(text: str) -> str:
 
     Accents and case are folded, hyphens and stars become spaces ("warm-edge" =
     "warm edge"), dotted acronyms and "n°" are dropped ("D.T.U. n°39" = "DTU 39"),
-    "1er" is "1", a unit may be glued to its number ("37dB" = "37 dB"), a
+    "1er" is "1", a dot between a code and its number is a space ("NV.65" =
+    "NV 65"), spelling variants are unified ("limitateur" = "limiteur"), a unit may be glued to its number ("37dB" = "37 dB"), a
     plural "s" and a participle's feminine "e" are dropped ("teintées" = "teinté"),
     and digit groups compare equal whatever the separator ("NF P 20-501"
     contains "20.501").
@@ -145,6 +150,8 @@ def _comparable(text: str) -> str:
     text = _ACRONYM.sub(lambda m: m.group(1).replace(".", "") + " ", text)
     text = _NF_PREFIX.sub("nf ", text)
     text = _NUMERO.sub("", text)
+    text = _LETTER_DOT_DIGIT.sub(" ", text)
+    text = _VARIANT.sub(lambda m: _VARIANTS[m.group(1)], text)
     text = _FIRST.sub("1", text)
     text = _UNIT_GLUE.sub(" ", text)
     text = _PLURAL.sub(r"\1", text)
