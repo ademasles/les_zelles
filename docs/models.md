@@ -37,7 +37,7 @@ Gap-fill asked the model only for fields the rules found nothing for, plus open 
 
 A miss audit then showed why: of 53 held-out misses, 35 sat in a passage the rules already cited for that field and only 1 was absent from the parsed text. Recall was lost in how rules cut values, not in reading or retrieval, so the fixes went into the rules (DEV 0.941 → 0.985, HOLDOUT 0.807 → 0.819 after the answer-key review).
 
-Worth re-measuring when the rules plateau on new, unseen tenders, with a stronger model (14B local, or a cloud model where the documents may leave the machine), restricted to the fields that still miss. The gap-fill code was about 30 lines (`llm_mode = "gaps"`) and lives in the history of the `claude/llm-gap-fill` experiment.
+Worth re-measuring when the rules plateau on new, unseen tenders, with a stronger model (14B local, or a cloud model where the documents may leave the machine), restricted to the fields that still miss. The gap-fill code was about 30 lines (`llm_mode = "gaps"`, commit `d0b0e4c`).
 
 ## Cost per document
 
