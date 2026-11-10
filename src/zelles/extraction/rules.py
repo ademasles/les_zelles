@@ -101,6 +101,10 @@ _HARDWARE_SUBJECT = re.compile(
     r"ventouses?|béquilles?|paumelles?|bandeaux?|limiteurs?|butées?",
     _I,
 )
+# One character of a hardware part's description. The description ends where a second
+# part is joined on ("crémone … avec poignée …") or the supplier is named
+# ("… des Etablissements X", "… de chez X"): those start another statement.
+_HW = r"(?:(?!\s+(?:avec|des\s+(?:Ets|[EÉ]tablissements)|de\s+chez)\b)[^.;,\n])"
 _SEAL_SUBJECT = re.compile(r"\bjoints?\b|\bmousses?\b|\bbandes?\b|calfeutrement|compriband", _I)
 _PRODUCT_NOT_PROFILE = re.compile(
     rf"{_GLASS_SUBJECT.pattern}|{_SHUTTER_SUBJECT.pattern}|{_HARDWARE_SUBJECT.pattern}|"
@@ -434,7 +438,7 @@ RULES: list[Rule] = [
     Rule(
         F.HARDWARE,
         re.compile(
-            r"\b(?:crémone[^.;,\n]{0,45}|paumelles?[^.;,\n]{0,30}|ferme-porte[^.;,\n]{0,40}|poignées?[^.;,\n]{0,40}|renvois?\s+d'angle[^.;,\n]{0,30}|barres?\s+de\s+man(?:œ|oe)uvre[^.;,\n]{0,30}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{0,30})",
+            rf"\b(?:crémone{_HW}{{0,45}}|paumelles?{_HW}{{0,30}}|ferme-porte{_HW}{{0,40}}|poignées?{_HW}{{0,40}}|renvois?\s+d'angle{_HW}{{0,30}}|barres?\s+de\s+man(?:œ|oe)uvre{_HW}{{0,30}}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{{0,30}})",
             _I,
         ),
         0.6,
@@ -442,13 +446,15 @@ RULES: list[Rule] = [
     Rule(  # further hardware named in a fitting list
         F.HARDWARE,
         re.compile(
-            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette)\b",
+            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|bandeaux?\s+ventouses?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|contacteurs?\s+à\s+cl[ée]f?s?|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette|rosettes?|cylindres?|butées?|sélecteurs?\s+de\s+vantail|supports?\s+d'angle|ailes?\s+de\s+préhension|ferrures)\b",
             _I,
         ),
         0.6,
-        # a part the contractor must not supply is no requirement ("pas d'option serrures")
+        # a part the contractor must not supply is no requirement ("pas d'option serrures");
+        # a stop on a shutter's slat is a shutter part ("lame finale … butée d'arrêt")
         excludes=re.compile(
-            r"\bvolets?\s+roulants?\b|\bpas\s+d'option|\bhors\s+lot\b|options?\s+(?:sont\s+)?disponibles",
+            r"\bvolets?\s+roulants?\b|\bpas\s+d'option|\bhors\s+lot\b|options?\s+(?:sont\s+)?disponibles"
+            r"|\btabliers?\b|\blames?\s+finales?\b",
             _I,
         ),
     ),
@@ -467,7 +473,7 @@ RULES: list[Rule] = [
     Rule(
         F.SHUTTERS,
         re.compile(
-            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))[^.;\n]{0,40}",
+            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))(?:(?!\s+(?:pour|avec)\b)[^.;\n]){0,40}",
             _I,
         ),
         0.65,
@@ -870,6 +876,19 @@ def _whole_words(body: str, match: re.Match[str]) -> str:
     return body[match.start() : end]
 
 
+# Quotes around a word are typography, not part of the value ('crémone "pompier"').
+_QUOTES = re.compile(r"[\"“”«»]")
+# Known text-extraction artefacts, mended in the value (the citation keeps the source as read).
+_OCR_FIXES = ((re.compile(r"\bmanceuvre", _I), "manœuvre"),)
+
+
+def _clean(text: str) -> str:
+    """A value as an estimator reads it: one space between words, no quotes, no OCR slips."""
+    for slip, fix in _OCR_FIXES:
+        text = slip.sub(fix, text)
+    return " ".join(_QUOTES.sub(" ", text).split()).rstrip(" ,;:")
+
+
 def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     """Run every rule over every chunk and return cited requirements."""
     found: dict[tuple[str, str, str], Requirement] = {}
@@ -900,7 +919,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     outside_lot=outside_lot,
                 ):
                     continue
-                raw = " ".join(_whole_words(body, match).split()).rstrip(" ,;:")
+                raw = _clean(_whole_words(body, match))
                 value = rule.normalize(match) if rule.normalize else raw
                 check = validate(rule.field, value)
                 if not check.ok:

@@ -404,3 +404,58 @@ def test_glass_set_in_a_rebate_is_no_installation() -> None:
     assert not _values(glass, F.INSTALLATION)
     frame = _extract("Les fenêtres seront posées en feuillure de maçonnerie.")
     assert _values(frame, F.INSTALLATION)
+
+
+def test_hardware_values_end_before_a_second_part_or_the_supplier() -> None:
+    reqs = _extract(
+        "Condamnation par crémone encastrée avec poignée à lever en fourche.\n\n"
+        'Crémone "pompier" en applique sur vantail semi-fixe.'
+    )
+    hardware = _values(reqs, F.HARDWARE)
+    assert any(v.lower().startswith("poignée à lever") for v in hardware), hardware
+    assert not any("crémone" in v.lower() and "poignée" in v.lower() for v in hardware), hardware
+    assert any(v.startswith("Crémone pompier") for v in hardware), hardware  # no quotes
+    supplier = _values(
+        _extract("Poignée de manceuvre laquée des Ets Durand ou équivalent."), F.HARDWARE
+    )
+    assert "Poignée de manœuvre laquée" in supplier, supplier  # OCR slip mended, supplier cut
+
+
+def test_hardware_parts_named_in_a_fitting_list() -> None:
+    reqs = _extract(
+        "- Béquille sur rosette laquée, demi-cylindre de sûreté\n"
+        "- Crémone périphérique à rouleaux, support d'angle et compas de sécurité\n"
+        "- Bandeau avec sélecteur de vantail, contacteur à clef et bandeaux ventouses\n"
+        "- Butées de porte, aile de préhension sur l'ouvrant, ferrures inox"
+    )
+    hardware = " | ".join(_values(reqs, F.HARDWARE)).lower()
+    for want in (
+        "rosette",
+        "cylindre",
+        "support d'angle",
+        "sélecteur de vantail",
+        "contacteur à clef",
+        "bandeaux ventouses",
+        "butées",
+        "aile de préhension",
+        "ferrures",
+    ):
+        assert want in hardware, (want, hardware)
+
+
+def test_a_stop_on_a_shutter_slat_is_not_window_hardware() -> None:
+    reqs = _extract("Une butée caoutchouc limite la course du tablier en position haute.")
+    assert not _values(reqs, F.HARDWARE)
+
+
+def test_shutter_drive_ends_before_its_scope_or_backup() -> None:
+    reqs = _extract(
+        "- Manœuvre électrique pour les baies du séjour avec manœuvre manuelle de secours.",
+        heading="2.3 Volets roulants",
+    )
+    shutters = _values(reqs, F.SHUTTERS)
+    # the backup drive is read on its own, and no value runs on past "pour …"
+    assert any(v.startswith("manœuvre manuelle de secours") for v in shutters), shutters
+    assert not any("pour les baies" in v for v in shutters), shutters
+    alone = _values(_extract("- Manœuvre électrique pour les baies du séjour."), F.SHUTTERS)
+    assert alone == {"Manœuvre électrique"}, alone
