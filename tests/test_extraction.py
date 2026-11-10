@@ -177,11 +177,23 @@ def test_near_duplicates_merge_into_the_most_complete_value() -> None:
     ]
     kept = merge_near_duplicates(reqs)
     assert [r.value for r in kept] == [
-        "SP615",  # same words as "type SP615 ou équivalent": the first one read stays
+        "type SP615 ou équivalent",
         "Manœuvre par treuil à tige semi-mobile",
         "crémone",
     ]
     assert any("also stated as 'treuil' (art c2)" in n for n in kept[1].notes)
+
+
+def test_scattered_words_are_not_a_duplicate() -> None:
+    from zelles.extraction.dedupe import merge_near_duplicates
+
+    reqs = [_hw("crémone pompier"), _hw("crémone à levier, ferme-porte pompier"), _hw("gâche")]
+    reqs.append(_hw("gâche électrique"))
+    assert [r.value for r in merge_near_duplicates(reqs)] == [
+        "crémone pompier",
+        "crémone à levier, ferme-porte pompier",
+        "gâche électrique",
+    ]
 
 
 def test_label_words_and_code_spelling_do_not_make_two_values() -> None:
