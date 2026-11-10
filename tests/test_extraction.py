@@ -154,3 +154,56 @@ def test_merge_drops_ungrounded_value_beside_grounded_one() -> None:
     rules = [req("A*3 E*7B V*A3", RequirementSource.RULES, RequirementStatus.VERIFIED)]
     llm = [req("A*2 V*A2", RequirementSource.LLM, RequirementStatus.UNVERIFIED)]
     assert [r.value for r in merge_requirements(rules, llm)] == ["A*3 E*7B V*A3"]
+
+
+def _hw(value: str, chunk: str = "c1") -> Requirement:
+    return Requirement(
+        field=SpecField.HARDWARE,
+        value=value,
+        citation=Citation(chunk_id=chunk, quote=value, locator=f"art {chunk}"),
+        status=RequirementStatus.VERIFIED,
+    )
+
+
+def test_near_duplicates_merge_into_the_most_complete_value() -> None:
+    from zelles.extraction.dedupe import merge_near_duplicates
+
+    reqs = [
+        _hw("SP615"),
+        _hw("type SP615 ou équivalent"),
+        _hw("treuil", "c2"),
+        _hw("Manœuvre par treuil à tige semi-mobile", "c3"),
+        _hw("crémone"),
+    ]
+    kept = merge_near_duplicates(reqs)
+    assert [r.value for r in kept] == [
+        "SP615",  # same words as "type SP615 ou équivalent": the first one read stays
+        "Manœuvre par treuil à tige semi-mobile",
+        "crémone",
+    ]
+    assert any("also stated as 'treuil' (art c2)" in n for n in kept[1].notes)
+
+
+def test_label_words_and_code_spelling_do_not_make_two_values() -> None:
+    from zelles.extraction.dedupe import merge_near_duplicates
+
+    colors = [
+        Requirement(field=SpecField.COLOR, value=v, status=RequirementStatus.VERIFIED)
+        for v in ("teinte gris foncé", "coloris gris foncé", "blanc")
+    ]
+    assert [r.value for r in merge_near_duplicates(colors)] == ["teinte gris foncé", "blanc"]
+    standards = [
+        Requirement(field=SpecField.STANDARDS, value=v, status=RequirementStatus.VERIFIED)
+        for v in ("NF.P 20.302", "NF P20-302", "NF D.T.U. 36.5", "D.T.U. 36.5")
+    ]
+    assert [r.value for r in merge_near_duplicates(standards)] == ["NF.P 20.302", "NF D.T.U. 36.5"]
+
+
+def test_materials_and_numbers_are_never_merged() -> None:
+    from zelles.extraction.dedupe import merge_near_duplicates
+
+    frames = [
+        Requirement(field=SpecField.FRAME_MATERIAL, value=v, status=RequirementStatus.VERIFIED)
+        for v in ("aluminium", "bois-aluminium")
+    ]
+    assert len(merge_near_duplicates(frames)) == 2

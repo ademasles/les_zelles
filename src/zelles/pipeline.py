@@ -23,6 +23,7 @@ from zelles.domain.spec import (
     SpecSheet,
     Usage,
 )
+from zelles.extraction.dedupe import merge_near_duplicates
 from zelles.extraction.llm_extractor import LLMExtractor
 from zelles.extraction.merge import merge_requirements
 from zelles.extraction.prompts import SUMMARY_SYSTEM
@@ -120,7 +121,7 @@ async def analyze(
     await progress("verify", 0.85, "Checking every value against the source")
     by_id = {c.id: c for c in chunks}
     verified = [verify_requirement(r, by_id) for r in llm_reqs]
-    requirements = merge_requirements(rule_reqs, verified)
+    requirements = merge_near_duplicates(merge_requirements(rule_reqs, verified))
 
     sheet = SpecSheet(
         document_id=doc_id,
