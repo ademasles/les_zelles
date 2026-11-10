@@ -17,19 +17,20 @@ les_zelles does that read and **shows its work**: every value comes with the exa
 
 ## Results on real tenders
 
-Measured on **9 real joinery CCTPs** (16 to 73 pages each) from public tenders, against hand-checked answer keys. Six are used for development; three are **held out** and their misses are never inspected while tuning.
+Measured on **9 real joinery CCTPs** (16 to 73 pages each) from public tenders, against hand-checked answer keys. Six are used for development; three are **held out** and their misses are not read while tuning. Scores are strict: the expected value must be in the extracted value, not just in its quote.
 
-| Configuration | Held-out F1 | Held-out precision | Dev F1 | Cost per CCTP |
-|---|---|---|---|---|
-| Rules only (default) | **0.860** | **0.871** | 0.973 | $0 |
-| Rules + local LLM (granite4.2 8B, Ollama) | 0.847 | about 4 pts lower | | $0, 2 to 3 min on an 8 GB GPU |
-| Rules only, before tuning on the nine tenders | 0.648 | | 0.716 | $0 |
+| Configuration | Held-out strict F1 | Dev strict F1 | Cost per CCTP |
+|---|---|---|---|
+| Rules only (default) | **0.819** | 0.973 | $0, about 3 s |
+| Rules + local LLM gap-fill (qwen3:8b, Ollama) | 0.801 | 0.937 | $0, about 2 min on an 8 GB GPU |
+| Rules only, first strict measure | 0.775 | 0.922 | $0 |
 
 What the numbers say:
 
-- The deterministic engine generalises: held-out F1 went from 0.648 to 0.860 by fixing patterns found on the dev set only.
-- A small local model finds a few extra requirements but adds more false positives than it saves, so it is opt-in, not the default. Model choice is a measured decision, not a hope.
-- The tender documents are confidential, so they and their answer keys stay out of this repository. A public synthetic case runs in CI as a quality gate. Details in [docs/evaluation.md](docs/evaluation.md).
+- The deterministic engine generalises in part: tuning on the dev set lifted the held-out score too, but a 15-point gap remains.
+- A small local model, asked to fill the rules' gaps from retrieved passages, adds more false positives than it saves, so it is opt-in. Model choice is a measured decision, not a hope.
+- Three held-out tenders give an interval of about ±0.05, and these figures use scorer v1; the one-to-one scorer v2 will lower them. Details in [docs/evaluation.md](docs/evaluation.md).
+- The tender documents are confidential, so they and their answer keys stay out of this repository. A public synthetic case runs in CI as a quality gate.
 
 ## How it works
 

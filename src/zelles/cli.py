@@ -233,7 +233,7 @@ def mcp(model: ModelOpt = None) -> None:
 def evaluate(
     golden_dir: Annotated[Path, typer.Argument(file_okay=False)] = Path("evals/golden"),
     model: ModelOpt = None,
-    min_f1: Annotated[float, typer.Option(help="Fail (exit 1) below this micro F1")] = 0.0,
+    min_f1: Annotated[float, typer.Option(help="Fail (exit 1) below this strict micro F1")] = 0.0,
     blind: Annotated[
         bool,
         typer.Option(help="Counts only: hide case names and missed values (held-out sets)."),
@@ -266,6 +266,12 @@ def evaluate(
             cost,
         )
     console.print(table)
+    if report.manifest is not None:
+        m = report.manifest
+        console.print(
+            f"scorer v{m.scorer_version} · code {m.git_commit or 'unknown'} · "
+            f"keys {m.keys_sha256} ({m.cases} cases) · {m.model}"
+        )
     for label, p, r, f, (lo, hi) in (
         ("lenient", report.precision, report.recall, report.f1, report.f1_ci),
         (
@@ -288,7 +294,7 @@ def evaluate(
     console.print(fields)
     for miss in report.misses[:30]:
         console.print(f"  [yellow]missed[/] {miss}")
-    if report.f1 < min_f1:
+    if report.strict_f1 < min_f1:
         raise typer.Exit(1)
 
 

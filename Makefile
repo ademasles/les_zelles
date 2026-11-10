@@ -19,7 +19,7 @@ test:
 	uv run pytest --cov=zelles
 
 eval:
-	uv run zelles eval evals/golden --min-f1 0.9
+	uv run zelles eval evals/golden --min-f1 0.85
 
 check: lint type test eval
 

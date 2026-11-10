@@ -4,7 +4,9 @@ Layout: ``evals/golden/<case>/`` holds the source (``cctp.pdf|docx|md|txt``) and
 ``expected.json`` with the requirements a careful estimator would list. A
 prediction matches an expectation when the field is the same and the value
 matches (numbers exactly, text by containment after accent folding).
-Precision counts every predicted requirement; recall every expected one.
+Predictions are grouped by field and value, since keys list a value once per
+tender, and groups are matched to expected requirements one to one. Precision
+counts value groups; recall counts expected requirements.
 
 Two scores are reported. The lenient one also looks in the cited quote, which
 credits a correct line whose extracted value is garbled. The strict one looks
@@ -15,14 +17,18 @@ change smaller than the interval is noise.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 import re
+import subprocess
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from zelles import __version__
 from zelles.config import Settings
 from zelles.domain.spec import Requirement, SpecField
 from zelles.llm.registry import create_embedder, create_llm
@@ -82,8 +88,22 @@ class CaseReport(BaseModel):
     fields: dict[str, FieldCounts] = Field(default_factory=dict)
 
 
+class RunManifest(BaseModel):
+    """What produced a score, so two numbers can be told apart months later."""
+
+    scorer_version: str
+    package_version: str
+    git_commit: str | None = Field(description="Commit of the code, '+dirty' if modified.")
+    keys_sha256: str = Field(description="Hash of every case's expected.json, in case order.")
+    cases: int
+    model: str
+    embedding_model: str
+    started_at: datetime
+
+
 class EvalReport(BaseModel):
     model: str
+    manifest: RunManifest | None = None
     cases: list[CaseReport]
     precision: float
     recall: float
@@ -103,6 +123,40 @@ class EvalReport(BaseModel):
             for i, c in enumerate(self.cases, 1)
         ]
         return self.model_copy(update={"cases": cases, "misses": []})
+
+
+def git_commit(path: Path | None = None) -> str | None:
+    """The checked-out commit of the code, or None outside a git checkout."""
+    cwd = path or Path(__file__).resolve().parent
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],  # noqa: S607
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no"],  # noqa: S607
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return f"{commit}+dirty" if dirty else commit
+
+
+def keys_digest(key_files: Sequence[Path]) -> str:
+    digest = hashlib.sha256()
+    for path in key_files:
+        digest.update(path.parent.name.encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+    return digest.hexdigest()[:16]
 
 
 def matches(pred: Requirement, exp: Expected, *, strict: bool = False) -> bool:
@@ -160,25 +214,95 @@ def _comparable(text: str) -> str:
     return _DIGIT_SEP.sub(".", text)
 
 
+SCORER_VERSION = "2"
+"""Bump when matching changes: scores from two scorer versions are not comparable."""
+
+
+def _value_group_key(pred: Requirement) -> tuple[str, str]:
+    if pred.numeric_value is not None:
+        return pred.field.value, f"{pred.numeric_value:g}"
+    return pred.field.value, _comparable(pred.value)
+
+
+def group_predictions(predicted: Sequence[Requirement]) -> list[list[Requirement]]:
+    """One group per field and comparable value.
+
+    Answer keys list each value once per tender, while the sheet repeats it for
+    every scope that states it ("PVC" in three articles). Scoring groups keeps
+    a repeated correct value from inflating precision and a repeated wrong one
+    from counting three times.
+    """
+    groups: dict[tuple[str, str], list[Requirement]] = {}
+    for pred in predicted:
+        groups.setdefault(_value_group_key(pred), []).append(pred)
+    return list(groups.values())
+
+
+def _group_matches(group: Sequence[Requirement], exp: Expected, *, strict: bool) -> bool:
+    return any(matches(p, exp, strict=strict) for p in group)
+
+
+def match_pairs(
+    groups: Sequence[Sequence[Requirement]], expected: Sequence[Expected], *, strict: bool
+) -> dict[int, int]:
+    """Maximum one-to-one matching, as {expected index: group index}.
+
+    A prediction can state at most one expected requirement, and an expected
+    requirement is found by at most one prediction, so one long value that
+    contains two expected values is credited once. Kuhn's augmenting paths:
+    a tender has at most a few hundred values, so this is instant.
+    """
+    edges = [
+        [g for g, group in enumerate(groups) if _group_matches(group, exp, strict=strict)]
+        for exp in expected
+    ]
+    owner: dict[int, int] = {}  # group index -> expected index
+
+    def augment(e: int, seen: set[int]) -> bool:
+        for g in edges[e]:
+            if g in seen:
+                continue
+            seen.add(g)
+            if g not in owner or augment(owner[g], seen):
+                owner[g] = e
+                return True
+        return False
+
+    for e in range(len(expected)):
+        augment(e, set())
+    return {e: g for g, e in owner.items()}
+
+
 def score(
     predicted: list[Requirement], expected: list[Expected], *, strict: bool = False
-) -> tuple[int, list[Expected], list[Requirement]]:
-    matched_exp = [e for e in expected if any(matches(p, e, strict=strict) for p in predicted)]
-    extras = [p for p in predicted if not any(matches(p, e, strict=strict) for e in expected)]
-    return len(matched_exp), [e for e in expected if e not in matched_exp], extras
+) -> tuple[int, list[Expected], list[Requirement], int]:
+    """Return (found, misses, extras, scored predictions) under one-to-one matching.
+
+    Extras are one representative per unmatched value group; ``scored`` is the
+    number of value groups, the denominator of precision.
+    """
+    groups = group_predictions(predicted)
+    pairs = match_pairs(groups, expected, strict=strict)
+    used = set(pairs.values())
+    misses = [e for i, e in enumerate(expected) if i not in pairs]
+    extras = [group[0] for g, group in enumerate(groups) if g not in used]
+    return len(pairs), misses, extras, len(groups)
 
 
 def field_counts(predicted: list[Requirement], expected: list[Expected]) -> dict[str, FieldCounts]:
     """Strict per-field counts: where recall is lost and where noise comes from."""
+    groups = group_predictions(predicted)
+    pairs = match_pairs(groups, expected, strict=True)
+    used = set(pairs.values())
     counts: dict[str, FieldCounts] = {}
-    for exp in expected:
+    for i, exp in enumerate(expected):
         c = counts.setdefault(exp.field.value, FieldCounts())
         c.expected += 1
-        c.found += any(matches(p, exp, strict=True) for p in predicted)
-    for pred in predicted:
-        c = counts.setdefault(pred.field.value, FieldCounts())
+        c.found += i in pairs
+    for g, group in enumerate(groups):
+        c = counts.setdefault(group[0].field.value, FieldCounts())
         c.predicted += 1
-        c.correct += any(matches(pred, e, strict=True) for e in expected)
+        c.correct += g in used
     return counts
 
 
@@ -231,8 +355,10 @@ def bootstrap_f1(
 async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
     from zelles.pipeline import analyze  # noqa: PLC0415
 
+    started = datetime.now(UTC)
     llm = create_llm(settings.llm_model, settings)
     embedder = create_embedder(settings.embedding_model, settings)
+    key_files: list[Path] = []
     cases: list[CaseReport] = []
     all_misses: list[str] = []
     try:
@@ -240,6 +366,7 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
             source = next((case_dir / n for n in SOURCE_NAMES if (case_dir / n).exists()), None)
             if source is None or not (case_dir / "expected.json").exists():
                 continue
+            key_files.append(case_dir / "expected.json")
             expected = [
                 Expected.model_validate(e)
                 for e in json.loads((case_dir / "expected.json").read_text())["requirements"]
@@ -253,14 +380,13 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
                 summarize=False,
             )
             predicted = analysis.sheet.requirements
-            tp, misses, extras = score(predicted, expected)
-            strict_tp, _, strict_extras = score(predicted, expected, strict=True)
-            # precision: a prediction is correct if it matches any expectation
-            correct_preds = len(predicted) - len(extras)
-            strict_correct = len(predicted) - len(strict_extras)
-            precision = _ratio(correct_preds, len(predicted))
+            tp, misses, extras, scored = score(predicted, expected)
+            strict_tp, _, strict_extras, _ = score(predicted, expected, strict=True)
+            correct_preds = scored - len(extras)
+            strict_correct = scored - len(strict_extras)
+            precision = _ratio(correct_preds, scored)
             recall = _ratio(tp, len(expected))
-            strict_precision = _ratio(strict_correct, len(predicted))
+            strict_precision = _ratio(strict_correct, scored)
             strict_recall = _ratio(strict_tp, len(expected))
             grounded = (
                 sum(1 for p in predicted if p.status == "verified") / len(predicted)
@@ -273,7 +399,7 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
             cases.append(
                 CaseReport(
                     name=case_dir.name,
-                    predicted=len(predicted),
+                    predicted=scored,
                     expected=len(expected),
                     true_positives=tp,
                     correct_predictions=correct_preds,
@@ -301,8 +427,20 @@ async def run_eval(golden_dir: Path, settings: Settings) -> EvalReport:
             await embedder.aclose()
     precision_all, recall_all, f1_all = micro_f1(cases)
     strict_p, strict_r, strict_f = micro_f1(cases, strict=True)
+    model = llm.name if llm else "rules"
+    manifest = RunManifest(
+        scorer_version=SCORER_VERSION,
+        package_version=__version__,
+        git_commit=git_commit(),
+        keys_sha256=keys_digest(key_files),
+        cases=len(cases),
+        model=model,
+        embedding_model=settings.embedding_model,
+        started_at=started,
+    )
     return EvalReport(
-        model=llm.name if llm else "rules",
+        model=model,
+        manifest=manifest,
         cases=cases,
         precision=precision_all,
         recall=recall_all,

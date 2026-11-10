@@ -9,9 +9,11 @@ from zelles.evaluation.harness import (
     Expected,
     bootstrap_f1,
     field_counts,
+    keys_digest,
     matches,
     micro_f1,
     run_eval,
+    score,
 )
 
 from .conftest import ROOT
@@ -20,7 +22,7 @@ from .conftest import ROOT
 async def test_rules_only_baseline(settings: Settings) -> None:
     report = await run_eval(ROOT / "evals" / "golden", settings)
     assert report.model == "rules"
-    assert report.cases and report.f1 >= 0.9
+    assert report.cases and report.strict_f1 >= 0.85
     assert report.strict_f1 <= report.f1
     assert report.f1_ci[0] <= report.f1 <= report.f1_ci[1]
 
@@ -77,6 +79,50 @@ async def test_blinded_report_keeps_counts_only(settings: Settings) -> None:
     assert "residence_tilleuls" not in dumped
     assert blind.fields == report.fields and blind.strict_f1 == report.strict_f1
     assert all(not c.misses and not c.extras for c in blind.cases)
+
+
+def test_one_long_value_states_one_expected_requirement() -> None:
+    expected = [
+        Expected(field=SpecField.FINISH, value="RAL 9016"),
+        Expected(field=SpecField.FINISH, value="anodisé"),
+    ]
+    both = _req("laqué RAL 9016 ou anodisé", "x")
+    found, misses, extras, scored = score([both], expected, strict=True)
+    assert (found, len(misses), len(extras), scored) == (1, 1, 0, 1)
+
+
+def test_matching_finds_the_best_assignment_whatever_the_order() -> None:
+    # "RAL 9016 anodisé" could take either key; only giving it "anodisé" lets
+    # the plain "RAL 9016" value take the other one.
+    expected = [
+        Expected(field=SpecField.FINISH, value="RAL 9016"),
+        Expected(field=SpecField.FINISH, value="anodisé"),
+    ]
+    predicted = [_req("RAL 9016 anodisé", "x"), _req("laqué RAL 9016", "x")]
+    for order in (predicted, predicted[::-1]):
+        for keys in (expected, expected[::-1]):
+            assert score(order, keys, strict=True)[0] == 2
+
+
+def test_a_value_repeated_across_scopes_counts_once() -> None:
+    expected = [Expected(field=SpecField.FINISH, value="RAL 9016")]
+    repeated = [_req("RAL 9016", "Logements"), _req("ral 9016", "Hall")]
+    wrong = [_req("brut", "a"), _req("Brut", "b")]
+    found, _, extras, scored = score(repeated + wrong, expected, strict=True)
+    assert (found, len(extras), scored) == (1, 1, 2)
+    counts = field_counts(repeated + wrong, expected)["finish"]
+    assert (counts.predicted, counts.correct, counts.extras) == (2, 1, 1)
+
+
+async def test_report_records_how_it_was_produced(settings: Settings) -> None:
+    report = await run_eval(ROOT / "evals" / "golden", settings)
+    manifest = report.manifest
+    assert manifest is not None
+    assert manifest.scorer_version == "2" and manifest.model == "rules"
+    assert manifest.cases == len(report.cases)
+    key = ROOT / "evals" / "golden" / "residence_tilleuls" / "expected.json"
+    assert manifest.keys_sha256 == keys_digest([key])
+    assert report.blinded().manifest == manifest
 
 
 def _case(name: str, predicted: int, expected: int, correct: int) -> CaseReport:
