@@ -42,7 +42,7 @@ Each report carries a **run manifest**: scorer version, code commit (marked `+di
 
 **Private set.** Nine real joinery CCTPs from public tenders (16 to 73 pages, Word exports with a text layer), each with a hand-checked answer key. The documents are confidential and are not in this repository; the keys live next to them. Six cases are used for development and three are held out: their scores are reported, their misses are not read while tuning.
 
-Strict micro F1, rules only unless stated, scorer v1 (many-to-one matching):
+History, strict micro F1 under scorer v1 (many-to-one matching):
 
 | Configuration | Held-out (3) | Dev (6) |
 |---|---|---|
@@ -51,7 +51,14 @@ Strict micro F1, rules only unless stated, scorer v1 (many-to-one matching):
 | Rules + qwen3:8b, gap-fill | 0.801 | 0.937 |
 | Current rules, 10 November | **0.819** | 0.973 |
 
-Scorer v2 lowers these numbers, by how much has to be measured on the private set. With three held-out tenders the 95 % interval is about ±0.05, so the held-out score cannot yet rank two close variants; growing the set to 30 or more tenders with a sealed test split is the next step.
+Same rules (commit `d7c60d6`), re-scored with scorer v2 on 10 November:
+
+| Set | Strict P | Strict R | Strict F1 (95 % CI) | v1 strict F1 |
+|---|---|---|---|---|
+| Held-out (3) | 0.747 | 0.793 | **0.769** (0.690–0.822) | 0.819 |
+| Dev (6) | 0.826 | 0.994 | 0.902 (0.870–0.944) | 0.988 |
+
+Recall barely moves; precision falls because near-duplicate values (shutters, hardware, installation) no longer hide behind one key entry. With three held-out tenders the interval is about ±0.07, so the held-out score cannot yet rank two close variants; growing the set to 30 or more tenders with a sealed test split is the next step.
 
 **Labelling choices.** Answer keys follow the estimator's reading where a value could go to two fields: shutter-box Dn,e,w ratings are acoustic requirements (apart from facade and air-inlet ratings), quality labels such as SNFQ are certifications, and a lacquered finish is a finish, not a colour.
 
