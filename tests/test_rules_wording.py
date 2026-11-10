@@ -404,3 +404,18 @@ def test_glass_set_in_a_rebate_is_no_installation() -> None:
     assert not _values(glass, F.INSTALLATION)
     frame = _extract("Les fenêtres seront posées en feuillure de maçonnerie.")
     assert _values(frame, F.INSTALLATION)
+
+
+def test_hardware_values_end_before_a_second_part_or_the_supplier() -> None:
+    reqs = _extract(
+        "Condamnation par crémone encastrée avec poignée à lever en fourche.\n\n"
+        'Crémone "pompier" en applique sur vantail semi-fixe.'
+    )
+    hardware = _values(reqs, F.HARDWARE)
+    assert any(v.lower().startswith("poignée à lever") for v in hardware), hardware
+    assert not any("crémone" in v.lower() and "poignée" in v.lower() for v in hardware), hardware
+    assert any(v.startswith("Crémone pompier") for v in hardware), hardware  # no quotes
+    supplier = _values(
+        _extract("Poignée de manceuvre laquée des Ets Durand ou équivalent."), F.HARDWARE
+    )
+    assert "Poignée de manœuvre laquée" in supplier, supplier  # OCR slip mended, supplier cut

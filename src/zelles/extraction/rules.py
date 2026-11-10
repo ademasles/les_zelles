@@ -101,6 +101,10 @@ _HARDWARE_SUBJECT = re.compile(
     r"ventouses?|béquilles?|paumelles?|bandeaux?|limiteurs?|butées?",
     _I,
 )
+# One character of a hardware part's description. The description ends where a second
+# part is joined on ("crémone … avec poignée …") or the supplier is named
+# ("… des Etablissements X", "… de chez X"): those start another statement.
+_HW = r"(?:(?!\s+(?:avec|des\s+(?:Ets|[EÉ]tablissements)|de\s+chez)\b)[^.;,\n])"
 _SEAL_SUBJECT = re.compile(r"\bjoints?\b|\bmousses?\b|\bbandes?\b|calfeutrement|compriband", _I)
 _PRODUCT_NOT_PROFILE = re.compile(
     rf"{_GLASS_SUBJECT.pattern}|{_SHUTTER_SUBJECT.pattern}|{_HARDWARE_SUBJECT.pattern}|"
@@ -434,7 +438,7 @@ RULES: list[Rule] = [
     Rule(
         F.HARDWARE,
         re.compile(
-            r"\b(?:crémone[^.;,\n]{0,45}|paumelles?[^.;,\n]{0,30}|ferme-porte[^.;,\n]{0,40}|poignées?[^.;,\n]{0,40}|renvois?\s+d'angle[^.;,\n]{0,30}|barres?\s+de\s+man(?:œ|oe)uvre[^.;,\n]{0,30}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{0,30})",
+            rf"\b(?:crémone{_HW}{{0,45}}|paumelles?{_HW}{{0,30}}|ferme-porte{_HW}{{0,40}}|poignées?{_HW}{{0,40}}|renvois?\s+d'angle{_HW}{{0,30}}|barres?\s+de\s+man(?:œ|oe)uvre{_HW}{{0,30}}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{{0,30}})",
             _I,
         ),
         0.6,
@@ -870,6 +874,19 @@ def _whole_words(body: str, match: re.Match[str]) -> str:
     return body[match.start() : end]
 
 
+# Quotes around a word are typography, not part of the value ('crémone "pompier"').
+_QUOTES = re.compile(r"[\"“”«»]")
+# Known text-extraction artefacts, mended in the value (the citation keeps the source as read).
+_OCR_FIXES = ((re.compile(r"\bmanceuvre", _I), "manœuvre"),)
+
+
+def _clean(text: str) -> str:
+    """A value as an estimator reads it: one space between words, no quotes, no OCR slips."""
+    for slip, fix in _OCR_FIXES:
+        text = slip.sub(fix, text)
+    return " ".join(_QUOTES.sub(" ", text).split()).rstrip(" ,;:")
+
+
 def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     """Run every rule over every chunk and return cited requirements."""
     found: dict[tuple[str, str, str], Requirement] = {}
@@ -900,7 +917,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     outside_lot=outside_lot,
                 ):
                     continue
-                raw = " ".join(_whole_words(body, match).split()).rstrip(" ,;:")
+                raw = _clean(_whole_words(body, match))
                 value = rule.normalize(match) if rule.normalize else raw
                 check = validate(rule.field, value)
                 if not check.ok:
