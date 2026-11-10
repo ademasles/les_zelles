@@ -446,3 +446,16 @@ def test_hardware_parts_named_in_a_fitting_list() -> None:
 def test_a_stop_on_a_shutter_slat_is_not_window_hardware() -> None:
     reqs = _extract("Une butée caoutchouc limite la course du tablier en position haute.")
     assert not _values(reqs, F.HARDWARE)
+
+
+def test_shutter_drive_ends_before_its_scope_or_backup() -> None:
+    reqs = _extract(
+        "- Manœuvre électrique pour les baies du séjour avec manœuvre manuelle de secours.",
+        heading="2.3 Volets roulants",
+    )
+    shutters = _values(reqs, F.SHUTTERS)
+    # the backup drive is read on its own, and no value runs on past "pour …"
+    assert any(v.startswith("manœuvre manuelle de secours") for v in shutters), shutters
+    assert not any("pour les baies" in v for v in shutters), shutters
+    alone = _values(_extract("- Manœuvre électrique pour les baies du séjour."), F.SHUTTERS)
+    assert alone == {"Manœuvre électrique"}, alone
