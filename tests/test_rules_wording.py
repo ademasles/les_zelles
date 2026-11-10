@@ -459,3 +459,8 @@ def test_shutter_drive_ends_before_its_scope_or_backup() -> None:
     assert not any("pour les baies" in v for v in shutters), shutters
     alone = _values(_extract("- Manœuvre électrique pour les baies du séjour."), F.SHUTTERS)
     assert alone == {"Manœuvre électrique"}, alone
+
+
+def test_comparable_splits_a_lone_letter_from_its_number() -> None:
+    assert _comparable("NF P20-302") == _comparable("NF.P 20.302")
+    assert "rc2" in _comparable("classe RC2")
