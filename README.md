@@ -21,15 +21,15 @@ Measured on **9 real joinery CCTPs** (16 to 73 pages each) from public tenders, 
 
 | Configuration | Held-out strict F1 | Dev strict F1 | Cost per CCTP |
 |---|---|---|---|
-| Rules only (default) | **0.819** | 0.973 | $0, about 3 s |
-| Rules + local LLM gap-fill (qwen3:8b, Ollama) | 0.801 | 0.937 | $0, about 2 min on an 8 GB GPU |
-| Rules only, first strict measure | 0.775 | 0.922 | $0 |
+| Rules only (default) | **0.769** (P 0.75, R 0.79) | 0.902 | $0, about 3 s |
+| Rules + local LLM gap-fill (qwen3:8b, Ollama), older scorer | 0.801 | 0.937 | $0, about 2 min on an 8 GB GPU |
+| Rules only, older scorer | 0.819 | 0.988 | $0 |
 
 What the numbers say:
 
 - The deterministic engine generalises in part: tuning on the dev set lifted the held-out score too, but a 15-point gap remains.
 - A small local model, asked to fill the rules' gaps from retrieved passages, adds more false positives than it saves, so it is opt-in. Model choice is a measured decision, not a hope.
-- Three held-out tenders give an interval of about ±0.05, and these figures use scorer v1; the one-to-one scorer v2 will lower them. Details in [docs/evaluation.md](docs/evaluation.md).
+- The first row uses the one-to-one scorer (v2): a value repeated in several forms now counts as noise, which is what the estimator reads. Most of the drop from the older scorer is precision, led by shutter and hardware values listed twice. Three held-out tenders give an interval of about ±0.07. Details in [docs/evaluation.md](docs/evaluation.md).
 - The tender documents are confidential, so they and their answer keys stay out of this repository. A public synthetic case runs in CI as a quality gate.
 
 ## How it works
