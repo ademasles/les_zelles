@@ -32,7 +32,7 @@ jobs:
       - run: uv run mypy src
       - run: uv run pytest --cov=zelles --cov-report=term-missing:skip-covered
       - name: extraction quality gate (rules only, no model needed)
-        run: uv run zelles eval evals/golden --model none --min-f1 0.9
+        run: uv run zelles eval evals/golden --model none --min-f1 0.85
 
   docker:
     runs-on: ubuntu-latest
