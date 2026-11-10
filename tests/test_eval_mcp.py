@@ -118,7 +118,7 @@ async def test_report_records_how_it_was_produced(settings: Settings) -> None:
     report = await run_eval(ROOT / "evals" / "golden", settings)
     manifest = report.manifest
     assert manifest is not None
-    assert manifest.scorer_version == "2" and manifest.model == "rules"
+    assert manifest.scorer_version == "3" and manifest.model == "rules"
     assert manifest.cases == len(report.cases)
     key = ROOT / "evals" / "golden" / "residence_tilleuls" / "expected.json"
     assert manifest.keys_sha256 == keys_digest([key])

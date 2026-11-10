@@ -6,7 +6,9 @@ prediction matches an expectation when the field is the same and the value
 matches (numbers exactly, text by containment after accent folding).
 Predictions are grouped by field and value, since keys list a value once per
 tender, and groups are matched to expected requirements one to one. Precision
-counts value groups; recall counts expected requirements.
+counts value groups; recall counts expected requirements. Wording variants
+are folded by ``retrieval.text.comparable``, shared with the sheet's merge of
+near-duplicate values.
 
 Two scores are reported. The lenient one also looks in the cited quote, which
 credits a correct line whose extracted value is garbled. The strict one looks
@@ -20,7 +22,6 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-import re
 import subprocess
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -32,7 +33,7 @@ from zelles import __version__
 from zelles.config import Settings
 from zelles.domain.spec import Requirement, SpecField
 from zelles.llm.registry import create_embedder, create_llm
-from zelles.retrieval.text import fold
+from zelles.retrieval.text import comparable
 
 SOURCE_NAMES = ("cctp.pdf", "cctp.docx", "cctp.md", "cctp.txt")
 
@@ -175,46 +176,10 @@ def matches(pred: Requirement, exp: Expected, *, strict: bool = False) -> bool:
     return want in _comparable(pred.value + quote)
 
 
-_ACRONYM = re.compile(r"\b((?:[a-z]+\.)+[a-z]+)\b\.?")  # "d.t.u." / "cer.f.f" -> "dtu" / "cerff"
-_NF_PREFIX = re.compile(r"\bnf\s*\.\s*(?=[a-z])|\bnf(?=[abepsx]\s*\d)")  # "nf.p", "nfp 20"
-_NUMERO = re.compile(r"\bn\s*[°º]\s*")  # "n°39", "n° 39"
-_FIRST = re.compile(r"\b1er\b")  # "1er août" = "1 août"
-_DIGIT_SEP = re.compile(r"(?<=\d)(?:\s*[.\-]\s*|,|\s+)(?=\d)")  # "20.501" = "20-501" = "20 501"
-_UNIT_GLUE = re.compile(r"(?<=\d)(?=[a-z])")  # "37dB" = "37 dB"
-_PLURAL = re.compile(r"\b([a-z]{4,})s\b")  # "thermolaqués" = "thermolaqué"
-_FEMININE = re.compile(r"\b([a-z]{3,}e)e\b")  # "teintée" = "teinté" (accents already folded)
-_LETTER_DOT_DIGIT = re.compile(r"(?<=[a-z])\.(?=\d)")  # "NV.65" = "NV 65"
-# Spelling variants of one word, not synonyms: the requirement must be the same.
-_VARIANTS = {"limitateur": "limiteur"}
-_VARIANT = re.compile(r"\b(" + "|".join(_VARIANTS) + r")\b")
+_comparable = comparable  # kept for older imports
 
 
-def _comparable(text: str) -> str:
-    """Normalise wording variants that do not change the requirement.
-
-    Accents and case are folded, hyphens and stars become spaces ("warm-edge" =
-    "warm edge"), dotted acronyms and "n°" are dropped ("D.T.U. n°39" = "DTU 39"),
-    "1er" is "1", a dot between a code and its number is a space ("NV.65" =
-    "NV 65"), spelling variants are unified ("limitateur" = "limiteur"), a unit may be glued to its number ("37dB" = "37 dB"), a
-    plural "s" and a participle's feminine "e" are dropped ("teintées" = "teinté"),
-    and digit groups compare equal whatever the separator ("NF P 20-501"
-    contains "20.501").
-    """
-    text = fold(text)
-    text = _ACRONYM.sub(lambda m: m.group(1).replace(".", "") + " ", text)
-    text = _NF_PREFIX.sub("nf ", text)
-    text = _NUMERO.sub("", text)
-    text = _LETTER_DOT_DIGIT.sub(" ", text)
-    text = _VARIANT.sub(lambda m: _VARIANTS[m.group(1)], text)
-    text = _FIRST.sub("1", text)
-    text = _UNIT_GLUE.sub(" ", text)
-    text = _PLURAL.sub(r"\1", text)
-    text = _FEMININE.sub(r"\1", text)
-    text = " ".join(text.replace("*", " * ").replace("-", " ").split())
-    return _DIGIT_SEP.sub(".", text)
-
-
-SCORER_VERSION = "2"
+SCORER_VERSION = "3"
 """Bump when matching changes: scores from two scorer versions are not comparable."""
 
 
