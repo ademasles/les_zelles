@@ -446,13 +446,15 @@ RULES: list[Rule] = [
     Rule(  # further hardware named in a fitting list
         F.HARDWARE,
         re.compile(
-            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette)\b",
+            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|bandeaux?\s+ventouses?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|contacteurs?\s+à\s+cl[ée]f?s?|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette|rosettes?|cylindres?|butées?|sélecteurs?\s+de\s+vantail|supports?\s+d'angle|ailes?\s+de\s+préhension|ferrures)\b",
             _I,
         ),
         0.6,
-        # a part the contractor must not supply is no requirement ("pas d'option serrures")
+        # a part the contractor must not supply is no requirement ("pas d'option serrures");
+        # a stop on a shutter's slat is a shutter part ("lame finale … butée d'arrêt")
         excludes=re.compile(
-            r"\bvolets?\s+roulants?\b|\bpas\s+d'option|\bhors\s+lot\b|options?\s+(?:sont\s+)?disponibles",
+            r"\bvolets?\s+roulants?\b|\bpas\s+d'option|\bhors\s+lot\b|options?\s+(?:sont\s+)?disponibles"
+            r"|\btabliers?\b|\blames?\s+finales?\b",
             _I,
         ),
     ),

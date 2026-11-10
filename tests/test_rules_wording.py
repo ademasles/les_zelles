@@ -419,3 +419,30 @@ def test_hardware_values_end_before_a_second_part_or_the_supplier() -> None:
         _extract("Poignée de manceuvre laquée des Ets Durand ou équivalent."), F.HARDWARE
     )
     assert "Poignée de manœuvre laquée" in supplier, supplier  # OCR slip mended, supplier cut
+
+
+def test_hardware_parts_named_in_a_fitting_list() -> None:
+    reqs = _extract(
+        "- Béquille sur rosette laquée, demi-cylindre de sûreté\n"
+        "- Crémone périphérique à rouleaux, support d'angle et compas de sécurité\n"
+        "- Bandeau avec sélecteur de vantail, contacteur à clef et bandeaux ventouses\n"
+        "- Butées de porte, aile de préhension sur l'ouvrant, ferrures inox"
+    )
+    hardware = " | ".join(_values(reqs, F.HARDWARE)).lower()
+    for want in (
+        "rosette",
+        "cylindre",
+        "support d'angle",
+        "sélecteur de vantail",
+        "contacteur à clef",
+        "bandeaux ventouses",
+        "butées",
+        "aile de préhension",
+        "ferrures",
+    ):
+        assert want in hardware, (want, hardware)
+
+
+def test_a_stop_on_a_shutter_slat_is_not_window_hardware() -> None:
+    reqs = _extract("Une butée caoutchouc limite la course du tablier en position haute.")
+    assert not _values(reqs, F.HARDWARE)
