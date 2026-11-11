@@ -15,6 +15,7 @@ the buyer, the lots and the links in different places, read below.
 from __future__ import annotations
 
 import csv
+import html
 import io
 import json
 import re
@@ -31,10 +32,10 @@ PAGE = 100  # the API's maximum per call
 
 # Lot titles and CPV codes that mean joinery work.
 JOINERY = re.compile(
-    r"\b(menuiserie|fenetre|baie|chassis|vitrerie|occultation|volet|facade vitree|"
+    r"(?<![a-z])(menuiserie|fenetre|baie|chassis|vitrerie|occultation|volet|facade vitree|"
     r"mur rideau|murs rideaux|store)"
 )
-INTERIOR = re.compile(r"menuiseries? (interieure|bois interieure)|agencement|parquet")
+INTERIOR = re.compile(r"menuiseries? (bois )?interieur|agencement|parquet")
 JOINERY_CPV = ("45421", "44221", "45441", "44112")
 
 
@@ -59,10 +60,17 @@ class Lot:
 
     @property
     def is_joinery(self) -> bool:
+        """Judged on the title; the CPV only when there is no title.
+
+        Notices often copy the main CPV onto every lot, so a partitions or
+        flooring lot can carry the joinery code.
+        """
         title = fold(self.title)
+        if not title.strip():
+            return self.cpv.startswith(JOINERY_CPV)
         if INTERIOR.search(title) and "exterieur" not in title:
             return False
-        return bool(JOINERY.search(title)) or self.cpv.startswith(JOINERY_CPV)
+        return bool(JOINERY.search(title))
 
 
 @dataclass
@@ -113,7 +121,7 @@ def _text(value: Any) -> str:
         value = value.get("#text", "")
     if isinstance(value, list):
         return " ".join(_text(v) for v in value)
-    return "" if value is None else " ".join(str(value).split())
+    return "" if value is None else " ".join(html.unescape(str(value)).split())
 
 
 def _fnsimple(notice: dict[str, Any]) -> tuple[str, str, str, list[Lot]]:

@@ -125,7 +125,14 @@ def test_reads_the_three_notice_formats() -> None:
 def test_interior_joinery_is_not_a_lead() -> None:
     assert parse_record(NO_JOINERY).joinery_lots == []
     assert Lot("", "Menuiseries intérieures et extérieures").is_joinery
-    assert Lot("", "Electricité", "45421100").is_joinery  # the CPV says joinery
+    assert Lot("", "Menuiseries intérieurs bois").is_joinery is False
+    assert Lot("", "", "45421100").is_joinery  # no title: the CPV decides
+    assert not Lot("9", "Serrurerie - Clôtures", "44221000").is_joinery  # copied CPV
+
+
+def test_html_entities_are_decoded() -> None:
+    lead = parse_record({**MAPA, "nomacheteur": "COMMUNAUTE D&#039;AGGLOMERATION"})
+    assert lead.buyer == "COMMUNAUTE D'AGGLOMERATION"
 
 
 def test_search_terms_lose_their_accents() -> None:
