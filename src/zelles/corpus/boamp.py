@@ -21,7 +21,7 @@ import json
 import re
 import unicodedata
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from typing import Any
 
@@ -32,10 +32,12 @@ PAGE = 100  # the API's maximum per call
 
 # Lot titles and CPV codes that mean joinery work.
 JOINERY = re.compile(
-    r"(?<![a-z])(menuiserie|fenetre|baie|chassis|vitrerie|occultation|volet|facade vitree|"
-    r"mur rideau|murs rideaux|store)"
+    r"(?<![a-z])(menuiserie|menusierie|mensuiserie|fenetre|baie|chassis|vitrerie|occultation|"
+    r"volet|facade vitree|mur rideau|murs rideaux|store|bso|brise soleil)"
 )
-INTERIOR = re.compile(r"menuiseries? (bois )?interieur|agencement|parquet")
+INTERIOR = re.compile(r"menuiseries? (bois )?interieur|agencement|parquet|mobilier")
+# What is left of a lot title once its number is gone, when it names no trade.
+_NUMBERING = re.compile(r"\b(lot|n|no)\b|lot-\d+|[\d\W_]+")
 JOINERY_CPV = ("45421", "44221", "45441", "44112")
 
 
@@ -50,6 +52,7 @@ class Lot:
     number: str
     title: str
     cpv: str = ""
+    generic: bool = False  # the title is only a number or the project's name
 
     @property
     def label(self) -> str:
@@ -66,7 +69,7 @@ class Lot:
         flooring lot can carry the joinery code.
         """
         title = fold(self.title)
-        if not title.strip():
+        if self.generic or not _NUMBERING.sub("", title):
             return self.cpv.startswith(JOINERY_CPV)
         if INTERIOR.search(title) and "exterieur" not in title:
             return False
@@ -212,6 +215,12 @@ def _lot_number(description: str) -> str:
     return match.group(1) if match else ""
 
 
+def _repeats(title: str, project: list[str]) -> bool:
+    """True when every word of the lot title is in the project title."""
+    words = _NUMBERING.sub(" ", fold(title)).split()
+    return bool(words) and set(words) <= set(project) and not JOINERY.search(fold(title))
+
+
 def parse_record(record: dict[str, Any]) -> Lead:
     """Turn one API record into a lead, whatever the notice format."""
     raw = record.get("donnees") or "{}"
@@ -225,6 +234,8 @@ def parse_record(record: dict[str, Any]) -> Lead:
     if notice_format:
         dce, profile, deadline, lots = _FORMATS[notice_format](donnees[notice_format])
     idweb = str(record.get("idweb") or "")
+    project = _NUMBERING.sub(" ", fold(_text(record.get("objet")))).split()
+    lots = [replace(lot, generic=_repeats(lot.title, project)) if project else lot for lot in lots]
     return Lead(
         idweb=idweb,
         title=_text(record.get("objet")),

@@ -130,6 +130,18 @@ def test_interior_joinery_is_not_a_lead() -> None:
     assert not Lot("9", "Serrurerie - Clôtures", "44221000").is_joinery  # copied CPV
 
 
+def test_lots_without_a_trade_fall_back_to_the_cpv() -> None:
+    assert Lot("5", "LOT-0005 5", "45421000").is_joinery
+    assert not Lot("5", "LOT-0005 5", "45410000").is_joinery
+    assert Lot("2", "MENUSIERIES EXTERIEURES").is_joinery  # common typo
+    assert not Lot("4", "Menuiserie bois / Mobilier").is_joinery
+    eforms = json.loads(EFORMS["donnees"])
+    lot = eforms["EFORMS"]["ContractNotice"]["cac:ProcurementProjectLot"]["cac:ProcurementProject"]
+    lot["cbc:Name"] = {"#text": "Construction d'un groupe scolaire"}
+    lead = parse_record({**EFORMS, "donnees": json.dumps(eforms)})
+    assert lead.lots[0].generic and lead.joinery_lots  # repeats the project, CPV 44221
+
+
 def test_html_entities_are_decoded() -> None:
     lead = parse_record({**MAPA, "nomacheteur": "COMMUNAUTE D&#039;AGGLOMERATION"})
     assert lead.buyer == "COMMUNAUTE D'AGGLOMERATION"
