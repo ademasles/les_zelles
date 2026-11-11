@@ -1,4 +1,4 @@
-"""Command-line interface: ``zelles analyze``, ``ask``, ``agent``, ``serve``, ``mcp``, ``eval``."""
+"""Command-line interface: ``zelles analyze``, ``ask``, ``agent``, ``serve``, ``mcp``, ``eval``, ``corpus``."""
 
 from __future__ import annotations
 
@@ -296,6 +296,54 @@ def evaluate(
         console.print(f"  [yellow]missed[/] {miss}")
     if report.strict_f1 < min_f1:
         raise typer.Exit(1)
+
+
+corpus = typer.Typer(help="Grow the evaluation corpus from public tenders.", no_args_is_help=True)
+app.add_typer(corpus, name="corpus")
+
+
+@corpus.command("find")
+def corpus_find(
+    out: Annotated[Path, typer.Option("--out", "-o", help="CSV to write")] = Path("leads.csv"),
+    days: Annotated[int, typer.Option(help="Notices published in the last N days")] = 60,
+    dept: Annotated[
+        list[str] | None, typer.Option("--dept", help="Department code, repeatable")
+    ] = None,
+    include_closed: Annotated[
+        bool, typer.Option(help="Also list notices whose deadline has passed")
+    ] = False,
+    max_records: Annotated[int, typer.Option(help="Notices to scan at most")] = 500,
+) -> None:
+    """List BOAMP notices with a joinery lot and the link to download the DCE."""
+    import httpx  # noqa: PLC0415
+
+    from zelles.corpus.boamp import search, to_csv  # noqa: PLC0415
+
+    with httpx.Client(timeout=30, headers={"User-Agent": "les-zelles-corpus"}) as client:
+        leads = list(
+            search(
+                client,
+                days=days,
+                open_only=not include_closed,
+                departments=dept or (),
+                max_records=max_records,
+            )
+        )
+    out.write_text(to_csv(leads), encoding="utf-8")
+    table = Table(title=f"{len(leads)} notices with a joinery lot")
+    for col in ("Published", "Deadline", "Dept", "Buyer", "Joinery lot"):
+        table.add_column(col, overflow="fold")
+    for lead in leads[:20]:
+        lot = lead.joinery_lots[0]
+        table.add_row(
+            lead.published,
+            lead.deadline[:10],
+            " ".join(lead.departments),
+            lead.buyer[:40],
+            lot.label[:60],
+        )
+    console.print(table)
+    console.print(f"Saved to {out}. Download each DCE from its link; nothing is fetched here.")
 
 
 @app.command()
