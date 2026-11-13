@@ -64,4 +64,4 @@ Recall barely moves; precision falls because near-duplicate values (shutters, ha
 
 ## Adding a case
 
-Three to five more real cases covering wood, renovation and curtain walls would make model comparisons sharper. A case can be shared publicly only once it is anonymised (no project, client or address).
+New cases come from public tenders: `zelles corpus find` lists them, `zelles corpus split` assigns them to train, validation or a sealed test set (one buyer per split), and keys are written by the [annotation guide](annotation.md). A folder holding a `SEALED` file is always scored blind, and each run is logged in that file. A case can be shared publicly only once it is anonymised (no project, client or address).
