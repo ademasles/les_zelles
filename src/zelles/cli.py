@@ -243,11 +243,21 @@ def evaluate(
     ] = None,
 ) -> None:
     """Score extraction against the golden set (per-field precision, recall, F1)."""
+    from zelles.corpus.split import SEAL_FILE  # noqa: PLC0415
     from zelles.evaluation.harness import run_eval  # noqa: PLC0415
 
     settings = _settings(model, None)
     report = asyncio.run(run_eval(golden_dir, settings))
-    if blind:
+    sealed = (golden_dir / SEAL_FILE).exists()
+    if sealed:
+        # A sealed test set only ever reports counts, and every look is logged:
+        # the number of looks is part of the result.
+        with (golden_dir / SEAL_FILE).open("a", encoding="utf-8") as log:
+            log.write(
+                f"{report.manifest.model_dump_json() if report.manifest else '{}'}"
+                f" strict_f1={report.strict_f1:.4f}\n"
+            )
+    if blind or sealed:
         report = report.blinded()
     if json_out is not None:
         json_out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
@@ -354,3 +364,33 @@ def version() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     app()
+
+
+@corpus.command("split")
+def corpus_split(
+    manifest: Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+    out: Annotated[Path, typer.Option("--out", "-o", help="Split file (JSON)")] = Path(
+        "splits.json"
+    ),
+    salt: Annotated[
+        str | None, typer.Option(help="Seed of the draw; kept from --out when it exists")
+    ] = None,
+) -> None:
+    """Assign downloaded tenders to train, validation and sealed test, one buyer per split.
+
+    Re-running with more tenders keeps every earlier assignment, so the test set
+    only grows.
+    """
+    import secrets  # noqa: PLC0415
+
+    from zelles.corpus.split import SPLITS, Split, assign, read_manifest  # noqa: PLC0415
+
+    existing = Split.model_validate_json(out.read_text()) if out.exists() else None
+    split = assign(
+        read_manifest(manifest),
+        salt=salt or (existing.salt if existing else secrets.token_hex(8)),
+        existing=existing,
+    )
+    out.write_text(split.model_dump_json(indent=2), encoding="utf-8")
+    counts = split.counts()
+    console.print(" · ".join(f"{s} {counts[s]}" for s in SPLITS) + f" → {out}")

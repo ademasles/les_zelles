@@ -182,3 +182,27 @@ def test_cli_analyze(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
     assert result.exit_code == 0, result.output
     assert out.exists() and "Saved as document" in result.output
+
+
+def test_cli_eval_on_a_sealed_set_logs_each_look_and_hides_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+
+    from typer.testing import CliRunner
+
+    from zelles.cli import app
+    from zelles.config import get_settings
+
+    monkeypatch.setenv("ZELLES_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("ZELLES_OCR_ENABLED", "false")
+    get_settings.cache_clear()
+    sealed = tmp_path / "test"
+    shutil.copytree(ROOT / "evals/golden", sealed)
+    (sealed / "SEALED").write_text("", encoding="utf-8")
+    for _ in range(2):
+        result = CliRunner().invoke(app, ["eval", str(sealed)])
+        assert result.exit_code == 0, result.output
+    get_settings.cache_clear()
+    assert "residence_tilleuls" not in result.output and "case 1" in result.output
+    assert len((sealed / "SEALED").read_text(encoding="utf-8").splitlines()) == 2
