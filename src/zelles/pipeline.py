@@ -27,6 +27,7 @@ from zelles.extraction.llm_extractor import LLMExtractor
 from zelles.extraction.merge import merge_requirements
 from zelles.extraction.prompts import SUMMARY_SYSTEM
 from zelles.extraction.rules import extract_with_rules
+from zelles.extraction.scope import focus_on_joinery
 from zelles.extraction.verify import verify_requirement
 from zelles.graph.knowledge import KnowledgeGraph, build_graph
 from zelles.ingest.chunking import chunk_document
@@ -99,10 +100,16 @@ async def analyze(
     timings["index"] = time.perf_counter() - t
 
     await progress("rules", 0.4, "Extracting values with domain rules")
-    rule_reqs = extract_with_rules(chunks)
+    focus = focus_on_joinery(chunks) if settings.joinery_focus else None
+    rule_reqs = extract_with_rules(focus.chunks if focus else chunks)
 
     usage = Usage(cost_usd=0.0 if llm is None else None)
     warnings = list(document.warnings)
+    if focus and focus.lots:
+        warnings.append(
+            f"Read the joinery lots only ({', '.join(focus.lots)}) and the clauses "
+            f"common to all lots; {focus.dropped} passages of other lots were skipped."
+        )
     llm_reqs: list[Requirement] = []
     if llm is not None:
         await progress("llm", 0.5, f"Reading the specification with {llm.name}")
