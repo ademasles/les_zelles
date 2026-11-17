@@ -121,3 +121,16 @@ def test_cctp_folder_general_clauses_and_descriptif() -> None:
     assert shared.how == "common" and shared.cctp[0].path == "SPO_DCE_CCTP.pdf"
     tce = select([Member("03-DOCS/DESCRIPTIF_TRAVAUX_TCE.pdf", 1), Member("RC.pdf", 1)], set())
     assert tce.how == "common"
+
+
+def test_folder_cue_skips_schedules_and_finds_dpgf() -> None:
+    from zelles.corpus.dce import Member
+
+    names = [
+        "3_CCTP+DPGF/Planning-Reaménagement.pdf",
+        "3_CCTP+DPGF/DCE REAMENAGEMENT.pdf",
+        "3_Pièces écrites/DPGF/Lot 03 Menuiseries extérieures.xlsx",
+    ]
+    picked = select([Member(n, 1) for n in names], {"3"})
+    assert [m.path for m in picked.cctp] == [names[1]] and picked.how == "common"
+    assert [m.path for m in picked.dpgf] == [names[2]]

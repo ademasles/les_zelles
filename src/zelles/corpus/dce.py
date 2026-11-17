@@ -24,6 +24,11 @@ DOCUMENT_SUFFIXES = (".pdf", ".docx", ".doc", ".odt", ".rtf")
 SHEET_SUFFIXES = (".xlsx", ".xls", ".ods", ".pdf", ".docx")
 CCTP = re.compile(r"c\W?c\W?t\W?p|clauses techniques particulieres")
 DESCRIPTIF = re.compile(r"descriptif|\bcctc\b")
+# Documents that sit next to the CCTP but are never it.
+NOT_CCTP = re.compile(
+    r"planning|calendrier|\bplans?\b|notice|\brc\b|reglement|\bae\b|acte d engagement|\bccap\b"
+    r"|rapport|diagnostic|etude|sondage|amiante|plomb|attestation|memoire|cadre de reponse"
+)
 GENERAL_CLAUSES = re.compile(r"preambule|clauses communes|tous corps|generalites|\bcommun")
 DPGF = re.compile(r"d\W?p\W?g\W?f|\bbpu\b|\bdqe\b|decomposition du prix")
 # A file name that says joinery: "menuiseries ext", "MEXT", "fenetres", "occultations".
@@ -172,11 +177,19 @@ def select(found: list[Member], lot_numbers: set[str]) -> Selection:
     docs = [m for m in found if m.suffix in DOCUMENT_SUFFIXES and not DPGF.search(m.name)]
     # The CCTP signal can sit in a folder ("3_CCTP+DPGF/descriptif.pdf"); without
     # any, a descriptive document for all trades stands in for it.
-    cctps = [m for m in docs if CCTP.search(m.name) or CCTP.search(m.folders)]
+    cctps = [
+        m
+        for m in docs
+        if CCTP.search(m.name) or (CCTP.search(m.folders) and not NOT_CCTP.search(m.name))
+    ]
     cctps = cctps or [m for m in docs if DESCRIPTIF.search(m.name)]
     specific = [m for m in cctps if not GENERAL_CLAUSES.search(m.name)]
     cctps = specific or cctps
-    sheets = [m for m in found if m.suffix in SHEET_SUFFIXES and DPGF.search(m.name)]
+    sheets = [
+        m
+        for m in found
+        if m.suffix in SHEET_SUFFIXES and (DPGF.search(m.name) or DPGF.search(m.folders))
+    ]
     selection = Selection(candidates=cctps)
     joinery = _best([m for m in cctps if _is_joinery_name(m.name, lot_numbers)])
     if joinery:
