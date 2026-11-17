@@ -92,3 +92,14 @@ def test_names_from_windows_zip_tools_are_decoded() -> None:
     assert readable("CCTP g\udc82n\udc82ral.pdf") == "CCTP général.pdf"
     member = Member(f"dce.zip{SEP}PiΦces/CCTP.pdf", 1)
     assert member.label == f"dce.zip{SEP}Pièces/CCTP.pdf"
+
+
+def test_folder_names_count_when_file_names_do_not_say() -> None:
+    from zelles.corpus.dce import Member
+
+    names = [
+        "DCE/Lot 09_SERR_MEN METALL/X_TVX_CCTP_Lot09.pdf",
+        "DCE/Lot 08_MEN EXT_BSO_V2/X_TVX_CCTPV2_Lot08.pdf",
+    ]
+    picked = select([Member(n, 1) for n in names], {"08", "09"})
+    assert [m.path for m in picked.cctp] == [names[1]]

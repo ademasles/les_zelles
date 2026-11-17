@@ -130,16 +130,18 @@ def _is_joinery_name(name: str, numbers: set[str]) -> bool:
     return bool(JOINERY_NAME.search(name) or JOINERY.search(name)) or _names_lot(name, numbers)
 
 
-def _name_rank(name: str) -> int:
-    return 2 * bool(EXTERIOR_NAME.search(name)) - bool(METALWORK_NAME.search(name))
+def _rank(member: Member) -> int:
+    """Exterior cues up, metalwork down, read in the folders too ("Lot 08_MEN EXT_BSO/")."""
+    where = " ".join(re.sub(r"[_\-./!]+", " ", fold(member.label)).split())
+    return 2 * bool(EXTERIOR_NAME.search(where)) - bool(METALWORK_NAME.search(where))
 
 
 def _best(found: list[Member]) -> list[Member]:
-    """The members whose names look most like exterior joinery."""
+    """The members whose paths look most like exterior joinery."""
     if not found:
         return []
-    top = max(_name_rank(m.name) for m in found)
-    return [m for m in found if _name_rank(m.name) == top]
+    top = max(_rank(m) for m in found)
+    return [m for m in found if _rank(m) == top]
 
 
 @dataclass
