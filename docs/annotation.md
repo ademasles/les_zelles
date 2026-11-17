@@ -86,8 +86,10 @@ fields.
 
 ## Process
 
-1. **Draft.** Run `zelles analyze` on the CCTP (rules, local model at most)
-   and start from its sheet. Never send a document to a cloud model.
+1. **Draft.** For `train` and `validation`, start from the rules' sheet
+   (`expected.draft.json`, local only; never send a document to a cloud
+   model). `test` keys are written from the CCTP alone: a key drafted by the
+   system under test would lean towards what the system already finds.
 2. **Read.** Read the joinery lot end to end and add what the draft missed.
    Delete what it found but the rules above exclude.
 3. **Check.** One pass per field against the table above. Write doubts in
@@ -100,6 +102,7 @@ fields.
 
 ## Change log
 
+- **2026-11-17:** test keys are written without a draft.
 - **2026-11-13:** first version, from the conventions used for the nine
   original keys (shutter-box ratings, SNFQ as a certification, lacquered as a
   finish) and the hardware decision of 2026-11-10 (one entry per part).
