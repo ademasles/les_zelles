@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     )
     embedding_base_url: str | None = None
     retrieval_top_k: int = 6
+    joinery_focus: bool = Field(
+        default=True,
+        description="In a CCTP covering every trade, extract from the joinery lots only.",
+    )
 
     # ---------------------------------------------------------------- ingestion
     parser: Literal["auto", "pdfium", "docling"] = "auto"
