@@ -23,6 +23,8 @@ from zelles.corpus.boamp import JOINERY, fold
 DOCUMENT_SUFFIXES = (".pdf", ".docx", ".doc", ".odt", ".rtf")
 SHEET_SUFFIXES = (".xlsx", ".xls", ".ods", ".pdf", ".docx")
 CCTP = re.compile(r"c\W?c\W?t\W?p|clauses techniques particulieres")
+DESCRIPTIF = re.compile(r"descriptif|\bcctc\b")
+GENERAL_CLAUSES = re.compile(r"preambule|clauses communes|tous corps|generalites|\bcommun")
 DPGF = re.compile(r"d\W?p\W?g\W?f|\bbpu\b|\bdqe\b|decomposition du prix")
 # A file name that says joinery: "menuiseries ext", "MEXT", "fenetres", "occultations".
 JOINERY_NAME = re.compile(r"menuis|\bmext\b|\bme\b|fenetre|occultation|chassis|mur rideau")
@@ -71,6 +73,12 @@ class Member:
         return SEP.join(
             "/".join(readable(p) for p in part.split("/")) for part in self.path.split(SEP)
         )
+
+    @property
+    def folders(self) -> str:
+        """The folders above the file, folded, archive names included."""
+        parts = re.split(r"/|!/", self.label)[:-1]
+        return " ".join(fold(p) for p in parts)
 
     @property
     def name(self) -> str:
@@ -161,7 +169,13 @@ def select(found: list[Member], lot_numbers: set[str]) -> Selection:
     of the DCE (one document for all lots), ``unclear`` several CCTPs and none
     named after the lot: the text has to decide.
     """
-    cctps = [m for m in found if m.suffix in DOCUMENT_SUFFIXES and CCTP.search(m.name)]
+    docs = [m for m in found if m.suffix in DOCUMENT_SUFFIXES and not DPGF.search(m.name)]
+    # The CCTP signal can sit in a folder ("3_CCTP+DPGF/descriptif.pdf"); without
+    # any, a descriptive document for all trades stands in for it.
+    cctps = [m for m in docs if CCTP.search(m.name) or CCTP.search(m.folders)]
+    cctps = cctps or [m for m in docs if DESCRIPTIF.search(m.name)]
+    specific = [m for m in cctps if not GENERAL_CLAUSES.search(m.name)]
+    cctps = specific or cctps
     sheets = [m for m in found if m.suffix in SHEET_SUFFIXES and DPGF.search(m.name)]
     selection = Selection(candidates=cctps)
     joinery = _best([m for m in cctps if _is_joinery_name(m.name, lot_numbers)])

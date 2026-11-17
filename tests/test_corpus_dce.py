@@ -103,3 +103,21 @@ def test_folder_names_count_when_file_names_do_not_say() -> None:
     ]
     picked = select([Member(n, 1) for n in names], {"08", "09"})
     assert [m.path for m in picked.cctp] == [names[1]]
+
+
+def test_cctp_folder_general_clauses_and_descriptif() -> None:
+    from zelles.corpus.dce import Member
+
+    folder = [
+        "3_Pièces écrites/CCTP/Lot 01 Gros oeuvre.pdf",
+        "3_Pièces écrites/CCTP/Lot 03 Menuiseries extérieures.pdf",
+        "3_Pièces écrites/CCTP/Clauses communes tous corps d'état.pdf",
+    ]
+    picked = select([Member(n, 1) for n in folder], {"3"})
+    assert [m.path for m in picked.cctp] == [folder[1]]
+    shared = select(
+        [Member("SPO_DCE_CCTP.pdf", 1), Member("SPO_DCE_CCTP_PREAMBULE COMMUN.pdf", 1)], set()
+    )
+    assert shared.how == "common" and shared.cctp[0].path == "SPO_DCE_CCTP.pdf"
+    tce = select([Member("03-DOCS/DESCRIPTIF_TRAVAUX_TCE.pdf", 1), Member("RC.pdf", 1)], set())
+    assert tce.how == "common"
