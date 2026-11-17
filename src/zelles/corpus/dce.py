@@ -27,6 +27,34 @@ DPGF = re.compile(r"d\W?p\W?g\W?f|\bbpu\b|\bdqe\b|decomposition du prix")
 # A file name that says joinery: "menuiseries ext", "MEXT", "fenetres", "occultations".
 JOINERY_NAME = re.compile(r"menuis|\bmext\b|\bme\b|fenetre|occultation|chassis|mur rideau")
 INTERIOR_NAME = re.compile(r"menuiseries? (bois )?int|\bmint\b|agencement")
+# Exterior cues rank a joinery CCTP above a metalwork or general one.
+EXTERIOR_NAME = re.compile(r"\bext|fenetre|occultation|\bbso\b|brise soleil|mur rideau|\bmext\b")
+METALWORK_NAME = re.compile(r"serrur|metall")
+# A lone CCTP named after another trade is not a document common to all lots.
+OTHER_TRADE = re.compile(
+    r"\bcouv|gros oeuvre|\bgo\b|plomb|electri|\bcvc\b|chauff|peintur|charpente|etanch|vrd"
+    r"|platr|cloison|sols?\b|carrel|ascens|demoli|desamiant"
+)
+_MOJIBAKE = re.compile(r"[\u0393-\u03c9\u2190-\u25ff\u2550-\u256c]")
+
+
+def readable(segment: str) -> str:
+    """A file name as its author wrote it.
+
+    Zip tools on Windows store names in the ANSI code page without saying so,
+    which Python reads as cp437 ("PiΦces" for "Pièces"); names on disk that
+    are not UTF-8 come back with surrogates.
+    """
+    if any("\udc80" <= c <= "\udcff" for c in segment):
+        return segment.encode("utf-8", "surrogateescape").decode("cp850", "replace")
+    if _MOJIBAKE.search(segment):
+        try:
+            return segment.encode("cp437").decode("cp1252")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            return segment
+    return segment
+
+
 SEP = "!/"  # between an archive and a member inside it
 
 
@@ -38,8 +66,16 @@ class Member:
     size: int
 
     @property
+    def label(self) -> str:
+        """The path for people and CSV files; ``path`` stays the key to extract it."""
+        return SEP.join(
+            "/".join(readable(p) for p in part.split("/")) for part in self.path.split(SEP)
+        )
+
+    @property
     def name(self) -> str:
-        return fold(PurePosixPath(self.path.rsplit(SEP, 1)[-1]).name)
+        base = PurePosixPath(self.label.rsplit(SEP, 1)[-1]).name
+        return " ".join(re.sub(r"[_\-.]+(?=[^.]*\.)", " ", fold(base)).split())
 
     @property
     def suffix(self) -> str:
@@ -94,6 +130,18 @@ def _is_joinery_name(name: str, numbers: set[str]) -> bool:
     return bool(JOINERY_NAME.search(name) or JOINERY.search(name)) or _names_lot(name, numbers)
 
 
+def _name_rank(name: str) -> int:
+    return 2 * bool(EXTERIOR_NAME.search(name)) - bool(METALWORK_NAME.search(name))
+
+
+def _best(found: list[Member]) -> list[Member]:
+    """The members whose names look most like exterior joinery."""
+    if not found:
+        return []
+    top = max(_name_rank(m.name) for m in found)
+    return [m for m in found if _name_rank(m.name) == top]
+
+
 @dataclass
 class Selection:
     """The documents picked for the joinery lot, and how sure the pick is."""
@@ -114,14 +162,14 @@ def select(found: list[Member], lot_numbers: set[str]) -> Selection:
     cctps = [m for m in found if m.suffix in DOCUMENT_SUFFIXES and CCTP.search(m.name)]
     sheets = [m for m in found if m.suffix in SHEET_SUFFIXES and DPGF.search(m.name)]
     selection = Selection(candidates=cctps)
-    joinery = [m for m in cctps if _is_joinery_name(m.name, lot_numbers)]
+    joinery = _best([m for m in cctps if _is_joinery_name(m.name, lot_numbers)])
     if joinery:
         selection.cctp, selection.how = joinery, "lot"
-    elif len(cctps) == 1:
+    elif len(cctps) == 1 and not OTHER_TRADE.search(cctps[0].name):
         selection.cctp, selection.how = cctps, "common"
     elif cctps:
         selection.how = "unclear"
-    selection.dpgf = [m for m in sheets if _is_joinery_name(m.name, lot_numbers)]
+    selection.dpgf = _best([m for m in sheets if _is_joinery_name(m.name, lot_numbers)])
     if not selection.dpgf and len(sheets) == 1:
         selection.dpgf = sheets
     return selection
@@ -131,7 +179,7 @@ def extract(case_dir: Path, member: Member, dest: Path) -> Path:
     """Copy one member out of its archives into ``dest``, keeping its file name."""
     parts = member.path.split(SEP)
     dest.mkdir(parents=True, exist_ok=True)
-    target = dest / PurePosixPath(parts[-1]).name
+    target = dest / readable(PurePosixPath(parts[-1]).name)
     if len(parts) == 1:
         shutil.copyfile(case_dir / parts[0], target)
         return target
@@ -224,9 +272,9 @@ def inspect_case(case_dir: Path, lot_numbers: set[str], max_candidates: int = 8)
     return {
         "status": "ok" if first else "cctp:unclear",
         "how": selection.how,
-        "cctp": " | ".join(m.path for m in selection.cctp),
+        "cctp": " | ".join(m.label for m in selection.cctp),
         "cctp_format": first.suffix.lstrip(".").lower() if first else "",
         "text_layer": ("yes" if opening_text(first).strip() else "no") if first else "",
-        "dpgf": " | ".join(m.path for m in selection.dpgf),
+        "dpgf": " | ".join(m.label for m in selection.dpgf),
         "cctp_candidates": str(len(selection.candidates)),
     }
