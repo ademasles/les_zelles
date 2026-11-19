@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from zelles.domain.spec import Requirement, SpecField
-from zelles.evaluation.harness import _comparable
+from zelles.domain.spec import Citation, Requirement, SpecField
+from zelles.evaluation.harness import Expected, _comparable, matches
 from zelles.extraction.rules import extract_with_rules
 from zelles.ingest.chunking import chunk_document
 from zelles.ingest.parsers import parse_document
@@ -464,3 +464,25 @@ def test_shutter_drive_ends_before_its_scope_or_backup() -> None:
 def test_comparable_splits_a_lone_letter_from_its_number() -> None:
     assert _comparable("NF P20-302") == _comparable("NF.P 20.302")
     assert "rc2" in _comparable("classe RC2")
+
+
+def test_comparable_spaces_codes_and_european_numbers() -> None:
+    assert _comparable("NF EN 14 024") == _comparable("NF EN 14024")
+    assert _comparable("NF EN 12207") == _comparable("NF EN 12-207")
+    assert _comparable("NV 65") == _comparable("NV65")
+    assert _comparable("EI 30") == _comparable("EI30")
+    assert _comparable("EN 12207") not in _comparable("EN 12208")
+
+
+def test_aev_classes_match_with_or_without_stars() -> None:
+    def pred(value: str) -> Requirement:
+        quote = Citation(chunk_id="c", quote=value, match_score=1.0)
+        return Requirement(field=F.AEV, value=value, citation=quote)
+
+    assert matches(pred("A*2 E*4 V*A2"), Expected(field=F.AEV, value="A2 E4 VA2"), strict=True)
+    assert matches(
+        pred("A*3 E*7B V*A3"), Expected(field=F.AEV, value="A*3 – E*7b – V*a3"), strict=True
+    )
+    assert not matches(
+        pred("A*3 E*6B V*A3"), Expected(field=F.AEV, value="A*3 E*7B V*A3"), strict=True
+    )

@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from zelles import __version__
 from zelles.config import Settings
 from zelles.domain.spec import Requirement, SpecField
+from zelles.domain.validators import parse_aev
 from zelles.llm.registry import create_embedder, create_llm
 from zelles.retrieval.text import comparable
 
@@ -171,6 +172,11 @@ def matches(pred: Requirement, exp: Expected, *, strict: bool = False) -> bool:
         return pred.numeric_value is not None and abs(pred.numeric_value - exp.numeric) < 1e-6
     if exp.value is None:
         return False
+    if exp.field == SpecField.AEV:
+        # "A2 E4 VA2" and "A*2 E*4 V*A2" are one class: compare the parsed parts.
+        want_aev = parse_aev(exp.value)
+        if want_aev is not None and want_aev == parse_aev(pred.value):
+            return True
     want = _comparable(exp.value)
     quote = "" if strict or pred.citation is None else " " + pred.citation.quote
     return want in _comparable(pred.value + quote)
@@ -179,7 +185,7 @@ def matches(pred: Requirement, exp: Expected, *, strict: bool = False) -> bool:
 _comparable = comparable  # kept for older imports
 
 
-SCORER_VERSION = "3"
+SCORER_VERSION = "4"
 """Bump when matching changes: scores from two scorer versions are not comparable."""
 
 

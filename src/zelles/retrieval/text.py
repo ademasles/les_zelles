@@ -148,6 +148,10 @@ _PLURAL = re.compile(r"\b([a-z]{4,})s\b")  # "thermolaqués" = "thermolaqué"
 _FEMININE = re.compile(r"\b([a-z]{3,}e)e\b")  # "teintée" = "teinté" (accents already folded)
 _LETTER_DOT_DIGIT = re.compile(r"(?<=[a-z])\.(?=\d)")  # "NV.65" = "NV 65"
 _LETTER_DIGIT = re.compile(r"\b([a-z])(?=\d)")  # "P20-302" = "P 20-302"
+# Codes whose letters are often glued to the number: "NV65", "EI30", "CF1h", "NF040".
+_CODE_DIGIT = re.compile(r"\b(nv|ei|ew|cf|pf|nf)(?=\d)")
+# A European standard's number written in two groups: "EN 12-207" = "EN 14 024" = "EN 12207".
+_EN_GROUPS = re.compile(r"\b(en|iso)\s+(\d{2})[\s.\-](\d{3})\b")
 # Spelling variants of one word, not synonyms: the requirement must be the same.
 _VARIANTS = {"limitateur": "limiteur"}
 _VARIANT = re.compile(r"\b(" + "|".join(_VARIANTS) + r")\b")
@@ -159,7 +163,9 @@ def comparable(text: str) -> str:
     Accents and case are folded, hyphens and stars become spaces ("warm-edge" =
     "warm edge"), dotted acronyms and "n°" are dropped ("D.T.U. n°39" = "DTU 39"),
     "1er" is "1", a dot between a code and its number is a space ("NV.65" =
-    "NV 65") and a lone letter is split from its number ("P20" = "P 20"), spelling variants are unified ("limitateur" = "limiteur"), a unit may be glued to its number ("37dB" = "37 dB"), a
+    "NV 65"), a lone letter or a short code is split from its number ("P20" = "P 20",
+    "EI30" = "EI 30"), a European number may be written in two groups ("EN 14 024" =
+    "EN 14024"), spelling variants are unified ("limitateur" = "limiteur"), a unit may be glued to its number ("37dB" = "37 dB"), a
     plural "s" and a participle's feminine "e" are dropped ("teintées" = "teinté"),
     and digit groups compare equal whatever the separator ("NF P 20-501"
     contains "20.501").
@@ -170,6 +176,8 @@ def comparable(text: str) -> str:
     text = _NUMERO.sub("", text)
     text = _LETTER_DOT_DIGIT.sub(" ", text)
     text = _LETTER_DIGIT.sub(r"\1 ", text)
+    text = _CODE_DIGIT.sub(r"\1 ", text)
+    text = _EN_GROUPS.sub(r"\1 \2\3", text)
     text = _VARIANT.sub(lambda m: _VARIANTS[m.group(1)], text)
     text = _FIRST.sub("1", text)
     text = _UNIT_GLUE.sub(" ", text)
