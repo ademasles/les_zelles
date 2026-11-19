@@ -38,7 +38,7 @@ FIELD_GROUPS: dict[str, list[SpecField]] = {
         F.SW,
         F.TLW,
     ],
-    "performance": [F.AEV, F.ACOUSTIC, F.SECURITY_CLASS, F.HARDWARE],
+    "performance": [F.AEV, F.ACOUSTIC, F.SECURITY_CLASS, F.FIRE_RATING, F.HARDWARE],
     "equipment": [F.SHUTTERS, F.AIR_INLETS, F.ACCESSIBILITY, F.INSTALLATION],
     "compliance": [F.STANDARDS, F.CERTIFICATIONS, F.REGULATION],
 }

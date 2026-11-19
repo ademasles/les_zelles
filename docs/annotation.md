@@ -76,6 +76,7 @@ fields.
 | `aev` | the classes as written: `A*3 E*7B V*A2` | the standard number |
 | `acoustic` | joinery ratings (Ra,tr, Rw) and shutter-box Dn,e,w | air-inlet ratings (under `air_inlets`) |
 | `security_class` | `RC2`, `CR2`, the standard's class | hardware items |
+| `fire_rating` | fire classes as written: `EI 30`, `E 30`, `pare-flammes 1/2 h` | the regulation article (under `regulation`) |
 | `hardware` | one entry per part named: handle, hinge, lock, closer, strike | general "quincaillerie de qualité" |
 | `shutters` | type, box, slat material, drive: `volet roulant`, `coffre tunnel`, `manœuvre électrique` | the acoustic rating of the box |
 | `air_inlets` | type, airflow module, acoustic rating, `hygroréglable` | the ventilation system of the building |

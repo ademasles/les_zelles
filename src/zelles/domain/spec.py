@@ -58,6 +58,7 @@ class SpecField(StrEnum):
     # security
     SECURITY_CLASS = "security_class"
     HARDWARE = "hardware"
+    FIRE_RATING = "fire_rating"
     # equipment
     SHUTTERS = "shutters"
     AIR_INLETS = "air_inlets"
@@ -337,6 +338,22 @@ FIELD_CATALOG: dict[SpecField, FieldInfo] = {
                 "ferme-porte",
                 "serrure",
                 "béquille",
+            ],
+        ),
+        _f(
+            F.FIRE_RATING,
+            C.SECURITY,
+            "Fire resistance",
+            "Fire resistance class of fire-rated doors and glazing (NF EN 13501-2: E, EI or EW with minutes,"
+            " or the older pare-flammes / coupe-feu degrees), as written in the spec.",
+            [
+                "résistance au feu",
+                "pare-flammes",
+                "coupe-feu",
+                "EI 30",
+                "E 30",
+                "NF EN 13501-2",
+                "procès-verbal de classement",
             ],
         ),
         _f(
