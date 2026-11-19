@@ -84,12 +84,87 @@ fields.
 | `certifications` | marks and labels: `CE`, `NF`, `Avis Technique`, `CEKAL`, `Acotherm`, `SNFQ`, `PEFC` | |
 | `regulation` | frameworks: `RE2020`, `RT existant`, `ERP`, `sismique` | standards |
 
+## Edge cases
+
+Settled while keying the 12 train tenders. Each one is now a rule.
+
+**What counts**
+
+- **Mixed lots.** When a lot mixes joinery and metalwork, key every opening in
+  the building envelope: windows, doors of any material (steel included),
+  glazed walls, verrières and roof glazing, with their glazing, shutters and
+  hardware. Railings, grilles, gates, stairs, ladders and canopies are left out.
+- **General chapters.** In a multi-trade CCTP, search the general chapters
+  (lot 00, "prescriptions communes") for what binds the joinery: regulation
+  frameworks, thermal and acoustic targets, ERP and fire rules, seismic zone,
+  accessibility, and standards cited for the joinery. Site organisation is
+  left out.
+- **Boilerplate.** A material or product the lot does not use is not keyed,
+  even when a copied clause names it (`PVC` inside the acoustic clause of an
+  aluminium lot). The inconsistency goes in `NOTES.md`.
+- **Contradictions.** Two direct requirements that contradict each other are
+  both keyed (`chêne massif` in the general clauses, `mélèze` in the
+  description), and the conflict goes in `NOTES.md`.
+- **Options.** Items to be priced as a variant or option (PSE, "à
+  comptabiliser en variante") are keyed like the base offer, with a note.
+  Items "pour mémoire" because another lot supplies them are not keyed.
+- **Permissions.** A value the CCTP only allows ("pourra être utilisé",
+  "possibilité de") is not a requirement and is not keyed. Standards are the
+  exception (below).
+- **Existing joinery.** Work on existing joinery or cladding is not keyed, but
+  existing hardware re-used on the new joinery (`crémones existantes`) is keyed
+  under `hardware`.
+
+**Where a value goes**
+
+- Wood species go under `finish`, and `frame_material` stays `bois`.
+- Heritage constraints (ABF, Monuments Historiques, PSMV, site classé) and
+  regulation articles (`CO 48`) go under `regulation`.
+- Fire classes go under `fire_rating` as written: resistance (`EI 30`, `E 30`,
+  `pare-flammes 1/2 h`) and reaction to fire (`B-s2,d0`, `M1`).
+- A figure with no numeric field of its own is written as text under the part
+  it describes: a glass `Sg` under `glazing_type`, a shutter box `Uc` or a
+  `gtot` under `shutters`. A glass `Sg` is never `sw`, and a `TLg` is never
+  `tlw`.
+- `uw` holds the U-value of the whole element, so `Ud` (doors) and `Ucw`
+  (curtain walls) go there too.
+- `acoustic` also holds a façade target that the CCTP sets for the joinery
+  ("classement des façades de 35 dB"). One number stated both as `RA,tr` and
+  as `DnT,A,tr` is one entry.
+- `shutters` holds every shutter, blind and sun protection the lot supplies,
+  outside, inside or within the glazing, with its controls (motor, crank,
+  weather station) and named products.
+- PMR requirements (threshold height, handle height and type, glazing
+  markings, operating force) go under `accessibility`, one entry each, and are
+  not repeated under `hardware`.
+- Smoke-vent sashes go under `opening_type`. Wood profile shapes (`mouton et
+  gueule de loup`) and `petits bois` go under `profile_system`.
+- A single pane's thickness (`4 mm`) goes under `glazing_composition` only when
+  it is the whole build-up.
+
+**How a value is written**
+
+- **Standards.** Every code the joinery lot's own chapters cite is keyed,
+  lists included and whatever the wording, one entry per code. From the
+  general chapters, only codes cited for the joinery. A list that shares a
+  prefix is split, repeating the prefix as the first code writes it:
+  `NF P 85-530/540` gives `NF P 85-530` and `NF P 85-540`, and
+  `D.T.U. n° 39.1, 39.4` gives `D.T.U. n° 39.1` and `D.T.U. n° 39.4`.
+- **Tables.** Each distinct value in a table is its own entry (`33.2`, `44.2`,
+  `55.2`, `66.2`).
+- **Colours.** A colour name given with its RAL code is one entry, the RAL
+  code. "Peinture blanche" gives a `finish` (`peinture`) and a `color`
+  (`blanche`).
+- **Hardware models** are written with their part (`ferme-porte DC700`).
+
 ## Process
 
-1. **Draft.** For `train` and `validation`, start from the rules' sheet
+1. **Draft.** For `train`, start from the rules' sheet
    (`expected.draft.json`, local only; never send a document to a cloud
-   model). `test` keys are written from the CCTP alone: a key drafted by the
-   system under test would lean towards what the system already finds.
+   model). `validation` and `test` keys are written from the CCTP alone: a key
+   drafted by the system under test would lean towards what the system already
+   finds, and would favour the rules over any other reader. Their annotator
+   never sees the rules, the drafts or the train results.
 2. **Read.** Read the joinery lot end to end and add what the draft missed.
    Delete what it found but the rules above exclude.
 3. **Check.** One pass per field against the table above. Write doubts in
@@ -102,6 +177,11 @@ fields.
 
 ## Change log
 
+- **2026-11-19:** edge cases settled while keying the 12 train tenders (mixed
+  lots, general chapters, options, permissions, figures without a field,
+  standard lists, colours, hardware models), fire classes under `fire_rating`
+  (#40), and validation keys written without a draft. The nine original keys
+  predate these rules and are not updated.
 - **2026-11-17:** test keys are written without a draft.
 - **2026-11-13:** first version, from the conventions used for the nine
   original keys (shutter-box ratings, SNFQ as a certification, lacquered as a
