@@ -23,6 +23,7 @@ from zelles.domain.spec import (
     SpecField,
 )
 from zelles.domain.validators import validate
+from zelles.retrieval.text import comparable
 
 F = SpecField
 _I = re.IGNORECASE
@@ -66,7 +67,7 @@ def _material(match: re.Match[str]) -> str:
 
 
 NUM = r"(\d+(?:[.,]\d+)?)"
-CMP = r"(?:\s*(?:[:=]|≤|≥|<=|>=|<|>|inférieur(?:e)?\s+(?:ou\s+égal\s+)?à|supérieur(?:e)?\s+(?:ou\s+égal\s+)?à|de|d'au plus|d'au moins|maxi(?:mum)?|mini(?:mum)?)\s*)*"
+CMP = r"(?:\s*(?:[:=]|≤|≥|<\s*/?\s*=|>\s*/?\s*=|<|>|inférieur(?:e)?\s+(?:ou\s+égal\s+)?à|supérieur(?:e)?\s+(?:ou\s+égal\s+)?à|de|d'au plus|d'au moins|maxi(?:mum)?|mini(?:mum)?)\s*)*"
 U_UNIT = r"(?:\s*W\s*/\s*\(?\s*m\s*2\s*[.·]?\s*K\s*\)?)?"
 PAREN = r"(?:\s*\([^)\n]{0,60}\))?"  # "SWC (facteur solaire hiver sans protection) = 0,38"
 DB = r"\s*d\s?\(?B\)?(?:\s*\(?A\)?)?"  # "dB", "dB(A)", "d(B)"
@@ -88,7 +89,9 @@ _INLET_ITEM = re.compile(
     r"(?:entr[ée]es?\s+d'air|grilles?|bouches?)(?:(?!\d\s*d\s?\(?B)[^\n]){0,70}$", _I
 )
 # A material named in a standard's title ("DTU 36.1 / Menuiseries en bois") is no requirement.
-_STANDARD_TITLE = re.compile(r"\b(?:NF\s+)?DTU\b|D\.T\.U|\bNF\s?[A-Z]?\s?\d|\bnormes?\b", _I)
+_STANDARD_TITLE = re.compile(
+    r"\b(?:NF\s+)?DTU\b|D\.T\.U|\b(?:NF|XP|FD)\s?[A-Z]?\s?\d|\bnormes?\b", _I
+)
 # "type X de chez Y ou équivalent": the product family follows the sentence's subject.
 _TYPE_X = (
     r"\b(?:type|gamme|modèle|marque)\s+(?:de\s+)?[^.;\n]{2,60}?ou\s+(?:techniquement\s+)?équivalent"
@@ -135,9 +138,42 @@ def _date_text(match: re.Match[str]) -> str:
     return f"{match.group(1)} du {match.group(2)}"
 
 
+# A standards list whose later codes drop the prefix: the head code, then its items.
+_LIST_HEAD = (
+    r"(?P<prefix>\b(?:NF\s*\.?\s*|N\.\s?F\.\s*)[A-Z]\s*\.?\s?|\b(?:NF\s+)?D\.?\s?T\.?\s?U\.?\s*(?:N\s*[°º]\s*)?)"
+    r"(?P<num>\d{2}(?:\s?[.\-]\s?\d{1,3})?)"
+)
+_LIST_SEP = r"\s*(?:,|/|\bet\b|&)\s*"
+_LIST_ITEM = rf"{_LIST_SEP}(?:\d{{2}}\s?[.\-]\s?\d{{1,3}}|\d{{3}})"
+_LIST_RUN = re.compile(rf"{_LIST_HEAD}((?:{_LIST_ITEM})*){_LIST_SEP}$", re.IGNORECASE)
+
+
+def _list_item(match: re.Match[str]) -> str:
+    """'NF P 85-530/540' -> 'NF P 85-540'; 'D.T.U. n° 39.1, 39.4' -> 'D.T.U. n° 39.4'.
+
+    The prefix is repeated as the first code writes it. An item that does not fit
+    the head's shape gives an empty value, which validation drops.
+    """
+    before = match.string[max(0, match.start() - 120) : match.start()]
+    runs = list(_LIST_RUN.finditer(before))
+    if not runs:
+        return ""
+    run = runs[-1]
+    prefix, num, item = run.group("prefix"), run.group("num"), match.group(0).replace(" ", "")
+    if re.search(r"D\.?\s?T\.?\s?U", prefix, re.IGNORECASE):
+        return f"{prefix}{item}" if re.fullmatch(r"\d{2}\.\d{1,2}", item) else ""
+    head = re.fullmatch(r"(\d{2})\s?([.\-])\s?(\d{3})", num)
+    if head is None:
+        return ""
+    if re.fullmatch(r"\d{3}", item):
+        return f"{prefix}{head.group(1)}{head.group(2)}{item}"
+    return f"{prefix}{item}" if re.fullmatch(r"\d{2}[.\-]\d{3}", item) else ""
+
+
 RULES: list[Rule] = [
-    Rule(F.UW, re.compile(rf"\bUw\b(?:\s+moyen)?{CMP}{NUM}{U_UNIT}", _I), 0.9),
-    Rule(F.UG, re.compile(rf"\bUg\b{CMP}{NUM}{U_UNIT}", _I), 0.9),
+    # Uw is the whole element's U-value: Ud for doors and Ucw for curtain walls count too.
+    Rule(F.UW, re.compile(rf"\b(?:Uw|Ud|Ucw)\b(?:\s+moyen)?{PAREN}{CMP}{NUM}{U_UNIT}", _I), 0.9),
+    Rule(F.UG, re.compile(rf"\bUg\b{PAREN}{CMP}{NUM}{U_UNIT}", _I), 0.9),
     Rule(F.UJN, re.compile(rf"\b(?:Ujn|Uws)\b{PAREN}{CMP}{NUM}{U_UNIT}", _I), 0.85),
     Rule(F.SW, re.compile(rf"\b(?:Sw|facteur solaire(?:\s+Sw)?)\b{CMP}{NUM}\s*%?", _I), 0.85),
     Rule(  # "SWC (facteur solaire hiver …) = 0,38", "SW (avec protection) = 0,25"
@@ -173,7 +209,8 @@ RULES: list[Rule] = [
     Rule(
         F.ACOUSTIC,
         re.compile(
-            rf"\b(?:Ra\s*,\s*tr|R\s*A\s*,\s*tr|Rw\s*\(\s*C\s*;\s*Ctr\s*\)|Rw)\b{CMP}{NUM}{DB}", _I
+            rf"\b(?:R\s*A\s*,?\s*tr|Rw\s*\(\s*C\s*;\s*Ctr\s*\)|Rw\s*\+\s*C\s*tr|Rw)\b{CMP}\s*{NUM}{DB}",
+            _I,
         ),
         0.85,
         heading_excludes=re.compile(r"coffres?|volets?|entr[ée]es?\s+d'air|grilles?", _I),
@@ -181,7 +218,7 @@ RULES: list[Rule] = [
     Rule(
         F.ACOUSTIC,
         re.compile(
-            rf"\b(?:DnT\s*,?\s*A\s*,\s*tr|isolement(?:\s+\w+){{0,2}}\s+de\s+façades?|isolement\s+acoustique|affaiblissement\s+acoustique|classement\s+de\s+façade|façades?\s+à)\b[^.;\n]{{0,40}}?{NUM}{DB}",
+            rf"\b(?:DnT\s*,?\s*A\s*,\s*tr|isolement(?:\s+\w+){{0,2}}\s+de\s+façades?|isolement\s+acoustique|affaiblissement\s+acoustique|classement\s+des?\s+façades?|façades?\s+à)\b[^.;\n]{{0,40}}?{NUM}{DB}",
             _I,
         ),
         0.75,
@@ -245,9 +282,19 @@ RULES: list[Rule] = [
     Rule(
         F.GLAZING_COMPOSITION,
         re.compile(
-            r"(?<![\w/.-])\d{1,2}(?:[.,]\d)?(?:\s*[/-]\s*\d{1,2}(?:[.,]\d)?){2,4}(?![\w/-])"
+            r"(?<![\w/.-])(?!0\d)\d{1,2}(?:[.,]\d)?(?:\s*[/-]\s*(?!0\d)\d{1,2}(?:[.,]\d)?){2,4}(?![\w/-])"
         ),
         0.8,
+        requires=re.compile(r"vitrage|verre|glace", _I),
+    ),
+    Rule(  # the gas or a named safety glass inside the build-up: "4/16 argon/4", "SP510/14/4"
+        F.GLAZING_COMPOSITION,
+        re.compile(
+            r"(?<![\w/.-])(?:SP\s?\d{2,3}|\d{1,2}(?:[.,]\d)?)\s*/\s*\d{1,2}\s*(?:argon|krypton|air)?"
+            r"\s*/\s*\d{1,2}(?:[.,]\d)?(?![\w/-])",
+            _I,
+        ),
+        0.75,
         requires=re.compile(r"vitrage|verre|glace", _I),
     ),
     Rule(  # "4.16.4": dotted notation, the middle number being the gap in mm
@@ -328,6 +375,7 @@ RULES: list[Rule] = [
         F.SPACER,
         re.compile(r"\bintercalaires?\s+[^.;,\n)]{2,40}|\bwarm[- ]edge\b|\bbord chaud\b", _I),
         0.7,
+        excludes=re.compile(r"transport|emball|frottement", _I),
     ),
     Rule(
         F.FRAME_MATERIAL,
@@ -339,7 +387,8 @@ RULES: list[Rule] = [
         requires=re.compile(r"menuiserie|fenêtre|porte|châssis|ensemble vitré|ouvrant", _I),
         excludes=re.compile(
             rf"volet|lame|poignée|renfort|coffre|grille|paumelle|charnière|\bbâtis?\b"
-            rf"|menuiseries?\s+intérieures?|{_STANDARD_TITLE.pattern}",
+            rf"|menuiseries?\s+intérieures?|{_STANDARD_TITLE.pattern}"
+            r"|\bBET\b|\bcales?\b|accessoires?|(?:bois|alu\w*|PVC)\s*,\s*(?:bois|alu\w*|PVC)\s*,",
             _I,
         ),
         normalize=_material,
@@ -349,6 +398,14 @@ RULES: list[Rule] = [
         re.compile(r"\bbois\s+(?:massif|exotique|résineux|lamellé[- ]collé|aboutés?)\b", _I),
         0.6,
         normalize=lambda m: "Bois",
+    ),
+    Rule(  # steel doors and frames of a mixed lot: "Porte acier", "profilés acier"
+        F.FRAME_MATERIAL,
+        re.compile(
+            r"\b(?:portes?|menuiseries?|châssis|profilés?|blocs?-?portes?)\s+(?:en\s+)?acier\b", _I
+        ),
+        0.6,
+        normalize=lambda m: "Acier",
     ),
     Rule(
         F.OPENING_TYPE,
@@ -428,11 +485,9 @@ RULES: list[Rule] = [
     Rule(
         F.SECURITY_CLASS, re.compile(r"\b(?:RC|CR)\s?[1-6]N?\b(?:\s+selon\s+NF\s+EN\s+1627)?"), 0.85
     ),
-    Rule(  # VEMCROS class string and A2P locks
+    Rule(  # VEMCROS class string
         F.SECURITY_CLASS,
-        re.compile(
-            r"\bV\s?\*\s?\d\s+E\s?\*\s?\d\s+M\s?\*\s?\d\s+C\s?R?O\s?S\s?\*\s?\d\b|\bA\s?2\s?P\b"
-        ),
+        re.compile(r"\bV\s?\*\s?\d\s+E\s?\*\s?\d\s+M\s?\*\s?\d\s+C\s?R?O\s?S\s?\*\s?\d\b"),
         0.8,
     ),
     Rule(
@@ -460,7 +515,7 @@ RULES: list[Rule] = [
     ),
     Rule(  # quality mark of hinges and locks, a certification like NF Fermetures
         F.CERTIFICATIONS,
-        re.compile(r"\b(?:NF\s*-\s*)?S\.?N\.?F\.?Q\.?(?:\s*-?\s*1)?\b"),
+        re.compile(r"\b(?:NF\s*[-./]?\s*)?S\.?N\.?F\.?Q\.?(?:\s*-?\s*1)?\b"),
         0.6,
     ),
     Rule(
@@ -608,7 +663,8 @@ RULES: list[Rule] = [
     Rule(
         F.STANDARDS,
         re.compile(
-            r"\b(?<!NF )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:-\d{1,2}\b)?(?:\s*/\s*\d+(?:\.\d+)?)*|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
+            r"\b(?<!NF )(?<!FD )(?<!XP )(?<!PR )D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:-\d{1,2}\b)?"
+            r"(?:\s*/\s*\d+(?:\.\d+)?)*(?:\s+P\s?\d(?:-\d)?\b)?|\bEurocode\s?\d\b|\b(?<!EN )(?<!NF )ISO\s?\d{3,5}(?:-\d+)*\b",
             _I,
         ),
         0.9,
@@ -617,9 +673,17 @@ RULES: list[Rule] = [
     Rule(  # AFNOR: "NF DTU 36.5", "NF EN 14351-1", "NF.P 08.322", "N.F. P 26 102", "NFP 01-010"
         F.STANDARDS,
         re.compile(
-            r"\b(?:NF|N\.\s?F\.)\s*\.?\s*(?:(?:D\.?\s?T\.?\s?U\.?|EN(?:\s+ISO)?)\s*\.?\s?\d{1,5}|[PBASTEX]\s*\.?\s?(?:\d{3,5}|\d{1,2}(?=\s?[.\-]\s?\d|\s\d{3}\b)))(?:\s?[.\-]\s?\d{1,4}|\s\d{3}\b)*(?:\s+P\d-\d)?\b"
+            r"\b(?<!FD )(?<!XP )(?<!PR )(?:NF|N\.\s?F\.)\s*\.?\s*(?:(?:D\.?\s?T\.?\s?U\.?|EN(?:\s+ISO)?)\s*\.?\s?\d{1,5}"
+            r"|[A-Z]\s*\.?\s?(?:\d{3,5}|\d{1,2}(?=\s?[.\-]\s?\d|\s\d{3}\b)))(?:\s?[.\-]\s?\d{1,4}|\s\d{3}\b)*"
+            r"(?:\s+P\s?\d(?:-\d)?)?(?:\s*/\s*(?:A\d|NA|IN\d?))?\b"
         ),
         0.9,
+        # the AFNOR alias of a DTU just named, an index code: "DTU 44.1 (NF P85-210-1)"
+        before_excludes=re.compile(
+            r"D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*(?:\s+P\s?\d(?:-\d)?)?\s*\(\s*$"
+            r"|indice\s+de\s+classement\s*:?\s*$",
+            _I,
+        ),
         in_heading=True,
     ),
     Rule(  # bare European numbers in a standards context: "conforme à la norme EN 1125"
@@ -643,7 +707,7 @@ RULES: list[Rule] = [
     Rule(  # AFNOR without the NF prefix: "XP P 20-650", "FD P 20-201", "D.T.U. P 06.011"
         F.STANDARDS,
         re.compile(
-            r"\b(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?)\s*(?:N°\s*)?[PBASTEX]\s*\.?\s?\d{2}\s?[.\-]\s?\d{3}\b"
+            r"\b(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?)\s*(?:N°\s*)?[PBASTEX]\s*\.?\s?\d{2}\s?[.\-]\s?\d{3}(?:-\d+)*\b"
         ),
         0.85,
         in_heading=True,
@@ -656,7 +720,8 @@ RULES: list[Rule] = [
         # a prefix of its own, or the AFNOR alias of a DTU just named: "NF DTU 37.1 (P24-203)"
         before_excludes=re.compile(
             r"(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?|NF)\s*(?:N°\s*)?$"
-            r"|D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*\s*\(\s*$",
+            r"|D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*\s*\(\s*$"
+            r"|indice\s+de\s+classement\s*:?\s*$",
             _I,
         ),
         in_heading=True,
@@ -668,22 +733,112 @@ RULES: list[Rule] = [
         normalize=lambda m: f"Cahier du CSTB {m.group(1)}",
         in_heading=True,
     ),
+    Rule(  # the prefix is part of the code: "FD DTU 34.2", "XP CEN/TS 1234", "PR NF EN 1279"
+        F.STANDARDS,
+        re.compile(
+            r"\b(?:FD|XP|PR)\s+(?:NF\s+)?(?:D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?(?:\s+P\s?\d(?:-\d)?\b)?"
+            r"|(?:EN|CEN\s*/\s*TS)(?:\s+ISO)?\s?\d{3,5}(?:-\d+)*\b)"
+        ),
+        0.85,
+        in_heading=True,
+    ),
+    Rule(  # other bodies' codes: "DIN 18055", "ENV 13050", "UTE C 73.897", "IT 249", "CM 66"
+        F.STANDARDS,
+        re.compile(
+            r"\bDIN\s+(?:EN\s+)?\d{3,5}(?:-\d+)*\b|\bENV\s?\d{3,5}(?:-\d+)*\b"
+            r"|\bUTE\s+C\s?\d{2}\s?[.\-]\s?\d{3}\b|\bIT\s?2\d{2}\b|\bCM\s?66\b"
+        ),
+        0.8,
+        in_heading=True,
+    ),
+    Rule(  # a list sharing the first code's prefix: "NF P 85-530/540", "DTU 31.2 et 31.4"
+        F.STANDARDS,
+        re.compile(
+            r"(?<![\w.\-])(?:\d{2}\s?[.\-]\s?\d{1,3}|\d{3})(?![\w]|\s?[.\-]\s?\d)"
+            r"(?!\s*(?:mm|cm|m\b|m2|m²|kg|%|°|dB|Pa\b|h\b))"
+        ),
+        0.75,
+        before_requires=re.compile(rf"{_LIST_HEAD}(?:{_LIST_ITEM})*{_LIST_SEP}$", _I),
+        normalize=_list_item,
+        in_heading=True,
+    ),
     Rule(  # snow and wind rules
         F.STANDARDS,
-        re.compile(r"\bN\.?\s?V\.?\s?65\b|\b(?<!R)N\s?84\b"),
+        re.compile(r"\bN\.?\s?V\.?\s?(?:65|84)\b|\b(?<!R)N\s?84\b"),
         0.8,
         in_heading=True,
     ),
     Rule(
         F.CERTIFICATIONS,
         re.compile(
-            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL|Acotherm|AC\s?[1-4]\s*[-/]?\s*Th\s?(?:[5-9]|1[0-2])|marque\s+NF(?:\s+Fermetures?)?|PEFC|FSC|CEBTP|NF\s+Fermetures?|(?:NF\s*[/-]\s*)?CSTB[aâ]t|FDES|certification\s+QB|C\.?E\.?R\.?F\.?F|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q)\b|\b(?:classement|classé|classe)\s+M[0-4]\b",
+            r"\b(?:marquage\s+CE|Avis\s+Technique(?:\s+du\s+CSTB)?|\bDTA\b|CEKAL"
+            r"|Acotherm(?:\s+AC\s?[1-4]?(?:\s*[-/]?\s*Th\s?\d{1,2})?)?"
+            r"|AC\s?[1-4]\s*[-/]?\s*Th\s?(?:[5-9]|1[0-2])|marque\s+NF(?:\s+Fermetures?)?|PEFC|FSC"
+            r"|NF\s+Fermetures?|(?:NF\s*[/-]\s*)?CSTB[aâ]t|certification\s+QB|C\.?E\.?R\.?F\.?F"
+            r"|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q|ACERMI"
+            r"|ECCA|E\.?\s?W\.?\s?A\.?\s?A|NF\s*-?\s*CSTB\s+certified)\b",
             _I,
         ),
         0.85,
     ),
-    Rule(  # fire reaction class under a fire heading: "Les menuiseries PVC sont M1 ou M2"
+    Rule(  # numbered NF marks: "marque NF040", "certification « NF 252 »"
         F.CERTIFICATIONS,
+        re.compile(r"\b(?:marque|certification|label)\s+\"?\s*(NF\s?-?\s?\d{3})\b", _I),
+        0.75,
+        normalize=lambda m: m.group(1),
+    ),
+    Rule(  # the NF mark alone: "La certification minimale requise est la certification NF."
+        F.CERTIFICATIONS,
+        re.compile(r"\b[Cc]ertification\s+(NF)\b(?![\s\-]*(?:\d|[A-Z]))"),
+        0.7,
+        normalize=lambda m: m.group(1),
+    ),
+    Rule(  # lock, wood and quality marks: "A2P", "CTB-P+", "certification D.24", "ISO 14001"
+        F.CERTIFICATIONS,
+        re.compile(r"\b[Aa]\s?2\s?[Pp]\b|\bCTB\s?-?\s?(?:P\+|B\+|LCA\b|[AF]\b)"),
+        0.75,
+    ),
+    Rule(
+        F.CERTIFICATIONS,
+        re.compile(
+            r"\bcertification\s+(D\.\s?\d{2})\b|\bcertificat\w*\s+(?:de\s+qualité\s+)?"
+            r"(ISO\s?(?:9001|14001|45001|50001))\b",
+            _I,
+        ),
+        0.7,
+        normalize=lambda m: m.group(1) or m.group(2),
+    ),
+    Rule(  # fire resistance: "EI 30", "E30", "(EI / 60)" in a fire context
+        F.FIRE_RATING,
+        re.compile(
+            r"\b(E\s?I|EW|E)\s?(?:/\s?)?(15|20|30|45|60|90|120|180|240)\b(?!\s*(?:mm|cm|%|°|kg|dB))"
+        ),
+        0.85,
+        context_requires=re.compile(
+            r"\bfeu\b|incendie|coupe|pare-?\s?flammes?|\bCF\b|\bPF\b|\bEI\b|résistance", _I
+        ),
+        normalize=lambda m: f"{m.group(1).replace(' ', '')} {m.group(2)}",
+    ),
+    Rule(  # fire degrees: "CF1h", "PF ½ heure", "coupe-feu 1/2 heure"
+        F.FIRE_RATING,
+        re.compile(
+            r"\b(?:CF|PF|coupe-?\s?feu|pare-?\s?flammes?)\s*(?:de\s+)?(?:1\s?[/⁄]\s?2|[12])\s*h(?:eures?)?\b",
+            _I,
+        ),
+        0.8,
+    ),
+    Rule(  # reaction to fire, Euroclass: "B-s2,d0", "A2-s1, d0"
+        F.FIRE_RATING,
+        re.compile(r"\b(?:A[12]|[B-F])\s?-\s?s\s?[123]\s?,\s?d\s?[012]\b"),
+        0.85,
+    ),
+    Rule(  # reaction to fire, M class: "classement M1"
+        F.FIRE_RATING,
+        re.compile(r"\b(?:classement|classé|classe)\s+M[0-4]\b", _I),
+        0.8,
+    ),
+    Rule(  # fire reaction class under a fire heading: "Les menuiseries PVC sont M1 ou M2"
+        F.FIRE_RATING,
         re.compile(r"(?<![/.])\bM[0-4]\b(?!\s*[.·]?\s*K\b|\s*/)"),  # not the unit "M2.K/W"
         0.7,
         context_requires=re.compile(r"\bfeu\b|incendie", _I),
@@ -759,7 +914,7 @@ _HANDLE_POSITION = re.compile(r"\bpositionn[ée]|\bréglementation|\bconforméme
 # Head words too generic to tell two values apart on their own: "volets battants" and
 # "volets roulants", "pose en tunnel" and "pose en applique" are different requirements.
 _GENERIC_HEADS = frozenset(
-    {"volet", "pose", "posé", "posée"}
+    {"volet", "pose", "posé", "posée", "ral"}  # "RAL 8004 ou … RAL 8003": two colours
     | {"dan", "sur"}  # location items: "dans les coffres …", "dans les traverses …"
 )
 _FILLERS = frozenset({"en", "de", "du", "des", "la", "le", "les", "l", "d", "sur", "à", "par"})
@@ -954,4 +1109,28 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     if key not in found:
                         per_slot[slot] = key
                 found.setdefault(key, req)
-    return list(found.values())
+    return _drop_repeated_standards(list(found.values()))
+
+
+def _drop_repeated_standards(reqs: list[Requirement]) -> list[Requirement]:
+    """Drop a code that a longer code in the same sentence already states.
+
+    A reference list repeats the code in its title ("NF DTU 34.5 P2 - DTU 34.5
+    Travaux de bâtiment"): the bare repeat is the same standard, not another one.
+    """
+    by_sentence: dict[tuple[str, str], list[Requirement]] = {}
+    for req in reqs:
+        if req.field == F.STANDARDS and req.citation is not None:
+            by_sentence.setdefault((req.citation.chunk_id, req.citation.quote), []).append(req)
+    dropped: set[int] = set()
+    for group in by_sentence.values():
+        for req in group:
+            short = re.compile(rf"(?<!\S){re.escape(comparable(req.value))}(?!\S)")
+            if any(
+                other is not req
+                and len(comparable(other.value)) > len(comparable(req.value))
+                and short.search(comparable(other.value))
+                for other in group
+            ):
+                dropped.add(id(req))
+    return [req for req in reqs if id(req) not in dropped]

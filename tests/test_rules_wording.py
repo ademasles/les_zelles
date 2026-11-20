@@ -160,15 +160,15 @@ def test_marks_classes_and_dated_texts() -> None:
         "Circulaire interministérielle n°2007-053 du 30 novembre 2007 relative à l'accessibilité."
     )
     certs = " | ".join(_values(reqs, F.CERTIFICATIONS))
-    for want in ("NF Fermeture", "VEMCROS", "CERFF", "SNJF"):
+    for want in ("NF Fermeture", "VEMCROS", "CERFF", "SNJF", "A2P"):
         assert want in certs, (want, certs)
-    assert {"V*4 E*2 M*1 CROS*1", "A2P"} <= _values(reqs, F.SECURITY_CLASS)
+    assert _values(reqs, F.SECURITY_CLASS) == {"V*4 E*2 M*1 CROS*1"}  # A2P is a mark
     assert "circulaire du 30 novembre 2007" in {v.lower() for v in _values(reqs, F.REGULATION)}
 
 
 def test_fire_class_read_under_a_fire_heading() -> None:
     reqs = _extract("Les menuiseries PVC sont M1 ou M2 au maximum.", heading="2.2 Tenue au feu")
-    assert {"M1", "M2"} <= _values(reqs, F.CERTIFICATIONS)
+    assert {"M1", "M2"} <= _values(reqs, F.FIRE_RATING)
 
 
 def test_precision_reference_lists_and_works_outside_the_lot() -> None:
@@ -361,9 +361,9 @@ def test_unit_m2_is_no_fire_class() -> None:
         "Réaction au feu : les panneaux auront une résistance thermique R ≥ 2 M2.K/W.",
         heading="3 Sécurité incendie",
     )
-    assert "M2" not in _values(reqs, F.CERTIFICATIONS)
+    assert "M2" not in _values(reqs, F.FIRE_RATING)
     fire = _extract("Les menuiseries PVC seront classées M1.", heading="3 Sécurité incendie")
-    assert "M1" in " ".join(_values(fire, F.CERTIFICATIONS))
+    assert "M1" in " ".join(_values(fire, F.FIRE_RATING))
 
 
 def test_frame_material_ignores_hinges_added_frames_and_interior_joinery() -> None:
@@ -486,3 +486,116 @@ def test_aev_classes_match_with_or_without_stars() -> None:
     assert not matches(
         pred("A*3 E*6B V*A3"), Expected(field=F.AEV, value="A*3 E*7B V*A3"), strict=True
     )
+
+
+def test_fire_classes_as_resistance_degrees_and_euroclasses() -> None:
+    reqs = _extract(
+        "Porte pleine EI 30 à 1 vantail.\n\n"
+        "Les vitrages seront de type coupe-feu (EI / 60).\n\n"
+        "Performance incendie : E30, châssis fixes et CF1h.\n\n"
+        "Baies PF ½ heure en façade.\n\n"
+        "Classement de réaction au feu : B-s2,d0 ;"
+    )
+    fire = _values(reqs, F.FIRE_RATING)
+    for want in ("EI 30", "EI 60", "E 30", "CF1h", "B-s2,d0"):
+        assert want in fire, (want, fire)
+    assert any(v.startswith("PF") for v in fire), fire
+    assert not _values(_extract("Vitrage 4/16/4, épaisseur E 30 mm."), F.FIRE_RATING)
+
+
+def test_standards_keep_prefix_part_and_amendment() -> None:
+    reqs = _extract(
+        "Normes de référence :\n\n"
+        "- FD DTU 34.2 Volets\n"
+        "- NF DTU 34.5 P2 - DTU 34.5 Travaux de bâtiment\n"
+        "- NF EN 1991-1-4/NA\n"
+        "- XP P20-650-1\n"
+        "- NF C 15-100\n"
+        "- DIN 18055 et ENV 13050\n"
+        "- Règles NV 65 et NV 84"
+    )
+    std = _values(reqs, F.STANDARDS)
+    for want in (
+        "FD DTU 34.2",
+        "NF DTU 34.5 P2",
+        "NF EN 1991-1-4/NA",
+        "XP P20-650-1",
+        "NF C 15-100",
+        "DIN 18055",
+        "ENV 13050",
+        "NV 84",
+    ):
+        assert want in std, (want, std)
+    assert "DTU 34.2" not in std and "DTU 34.5" not in std, std
+
+
+def test_standards_lists_repeat_the_first_prefix() -> None:
+    reqs = _extract(
+        "Les ouvrages seront conformes aux normes NF P 85-530/540/541, "
+        "aux D.T.U. n° 39.1, 39.4 et 36.1 et aux normes NFP 08.301 et 302."
+    )
+    std = _values(reqs, F.STANDARDS)
+    for want in (
+        "NF P 85-530",
+        "NF P 85-540",
+        "NF P 85-541",
+        "D.T.U. n° 39.4",
+        "D.T.U. n° 36.1",
+        "NFP 08.302",
+    ):
+        assert want in std, (want, std)
+    lone = _values(_extract("Pose selon le DTU 36.5 et 400 m2 de façade."), F.STANDARDS)
+    assert lone == {"DTU 36.5"}, lone
+
+
+def test_standards_skip_aliases_and_index_codes() -> None:
+    reqs = _extract(
+        "Etanchéité selon le DTU 44.1 (NF P85-210-1).\n\n"
+        "Norme NF EN 12207 (Indice de classement : P20-302)."
+    )
+    std = _values(reqs, F.STANDARDS)
+    assert "DTU 44.1" in std and "NF EN 12207" in std, std
+    assert not any("85-210" in v or "20-302" in v for v in std), std
+
+
+def test_numeric_wordings_with_notes_and_slashed_comparators() -> None:
+    reqs = _extract(
+        "- Coef. de transmission thermique Uw (fenêtre) <= 1.20 W/m2.°C\n"
+        "- Coef. de transmission thermique Ud (portes) <= 1.50 W/m2.°C\n"
+        "- Coef. de transmission thermique Ug (vitrage) <= 1.00 W/m2.°C\n"
+        "- facteur solaire Sw </= 0.35\n"
+        "- performance acoustique minimale : RAtr ≥ 30dB\n"
+        "- Les Rw+C tr seront calculés pour un classement des façades de 35 dB."
+    )
+    assert {1.2, 1.5} <= _numbers(reqs, F.UW)
+    assert _numbers(reqs, F.UG) == {1.0}
+    assert _numbers(reqs, F.SW) == {0.35}
+    assert {30.0, 35.0} <= _numbers(reqs, F.ACOUSTIC)
+
+
+def test_certification_marks_with_their_scope() -> None:
+    reqs = _extract(
+        "La certification minimale requise est la certification NF.\n\n"
+        "Quincaillerie comportant la marque NF040.\n\n"
+        "Label ACOTHERM AC2 ; bois certifié CTB-B+ ; isolants certifiés ACERMI.\n\n"
+        "Paumelles renforcées NF SNFQ laquées ; label EWAA et label ECCA.\n\n"
+        "Les fiches environnementales (FDES) et les essais CEBTP seront fournis."
+    )
+    certs = _values(reqs, F.CERTIFICATIONS)
+    for want in ("NF", "NF040", "ACOTHERM AC2", "CTB-B+", "ACERMI", "NF SNFQ", "EWAA", "ECCA"):
+        assert want in certs, (want, certs)
+    assert not {"FDES", "CEBTP", "SNFQ", "ACOTHERM"} & certs, certs
+
+
+def test_coded_values_of_glazing_colour_and_steel() -> None:
+    reqs = _extract(
+        "Double vitrage isolant 4/16 argon/4 ; ailleurs le vitrage sera du SP510/14/4.\n\n"
+        "Profilés de teinte Brun cuivré RAL 8004 ou Brun argile RAL 8003.\n\n"
+        "Porte acier de type robuste."
+    )
+    assert {"4/16 argon/4", "SP510/14/4"} <= _values(reqs, F.GLAZING_COMPOSITION)
+    colours = " | ".join(_values(reqs, F.COLOR))
+    assert "RAL 8004" in colours and "RAL 8003" in colours, colours
+    assert "Acier" in _values(reqs, F.FRAME_MATERIAL)
+    article = _extract("3-08-1 Châssis fixe trapézoïdal avec vitrage feuilleté.")
+    assert not _values(article, F.GLAZING_COMPOSITION)
