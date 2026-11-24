@@ -138,6 +138,12 @@ def _date_text(match: re.Match[str]) -> str:
     return f"{match.group(1)} du {match.group(2)}"
 
 
+# The AFNOR alias of a DTU just named, or an index code: "DTU 44.1 (NF P85-210-1)".
+_DTU_ALIAS = re.compile(
+    r"D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*(?:\s+P\s?\d(?:-\d)?)?\s*\(\s*$"
+    r"|indice\s+de\s+classement\s*:?\s*$",
+    _I,
+)
 # A standards list whose later codes drop the prefix: the head code, then its items.
 _LIST_HEAD = (
     r"(?P<prefix>\b(?:NF\s*\.?\s*|N\.\s?F\.\s*)[A-Z]\s*\.?\s?|\b(?:NF\s+)?D\.?\s?T\.?\s?U\.?\s*(?:N\s*[°º]\s*)?)"
@@ -388,7 +394,7 @@ RULES: list[Rule] = [
         excludes=re.compile(
             rf"volet|lame|poignée|renfort|coffre|grille|paumelle|charnière|\bbâtis?\b"
             rf"|menuiseries?\s+intérieures?|{_STANDARD_TITLE.pattern}"
-            r"|\bBET\b|\bcales?\b|accessoires?|(?:bois|alu\w*|PVC)\s*,\s*(?:bois|alu\w*|PVC)\s*,",
+            r"|\bBET\b|\bcales?\b|\blaiton\b|\(\s*(?:bois|alu\w*|PVC)\s*,\s*(?:bois|alu\w*|PVC)\s*,",
             _I,
         ),
         normalize=_material,
@@ -678,12 +684,7 @@ RULES: list[Rule] = [
             r"(?:\s+P\s?\d(?:-\d)?)?(?:\s*/\s*(?:A\d|NA|IN\d?))?\b"
         ),
         0.9,
-        # the AFNOR alias of a DTU just named, an index code: "DTU 44.1 (NF P85-210-1)"
-        before_excludes=re.compile(
-            r"D\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:[.\-]\d+)*(?:\s+P\s?\d(?:-\d)?)?\s*\(\s*$"
-            r"|indice\s+de\s+classement\s*:?\s*$",
-            _I,
-        ),
+        before_excludes=_DTU_ALIAS,
         in_heading=True,
     ),
     Rule(  # bare European numbers in a standards context: "conforme à la norme EN 1125"
@@ -710,6 +711,7 @@ RULES: list[Rule] = [
             r"\b(?:XP|FD|GA|BP|D\.?\s?T\.?\s?U\.?)\s*(?:N°\s*)?[PBASTEX]\s*\.?\s?\d{2}\s?[.\-]\s?\d{3}(?:-\d+)*\b"
         ),
         0.85,
+        before_excludes=_DTU_ALIAS,
         in_heading=True,
     ),
     Rule(  # ...or bare in a reference context: "Règles NV 65 (P 06-011)"
@@ -775,7 +777,7 @@ RULES: list[Rule] = [
             r"|Acotherm(?:\s+AC\s?[1-4]?(?:\s*[-/]?\s*Th\s?\d{1,2})?)?"
             r"|AC\s?[1-4]\s*[-/]?\s*Th\s?(?:[5-9]|1[0-2])|marque\s+NF(?:\s+Fermetures?)?|PEFC|FSC"
             r"|NF\s+Fermetures?|(?:NF\s*[/-]\s*)?CSTB[aâ]t|certification\s+QB|C\.?E\.?R\.?F\.?F"
-            r"|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q|ACERMI"
+            r"|S\.?N\.?J\.?F|NF\s?\.?\s?CTB|NF\s+Habitat(?:\s+HQE)?|VEMCROS|label\s+NF\s?Q"
             r"|ECCA|E\.?\s?W\.?\s?A\.?\s?A|NF\s*-?\s*CSTB\s+certified)\b",
             _I,
         ),

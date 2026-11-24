@@ -183,5 +183,6 @@ def comparable(text: str) -> str:
     text = _UNIT_GLUE.sub(" ", text)
     text = _PLURAL.sub(r"\1", text)
     text = _FEMININE.sub(r"\1", text)
-    text = " ".join(text.replace("*", " * ").replace("-", " ").split())
+    text = re.sub(r"[-\u2010-\u2015]", " ", text.replace("*", " * "))  # any dash
+    text = " ".join(text.split())
     return _DIGIT_SEP.sub(".", text)

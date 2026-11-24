@@ -472,6 +472,7 @@ def test_comparable_spaces_codes_and_european_numbers() -> None:
     assert _comparable("NV 65") == _comparable("NV65")
     assert _comparable("EI 30") == _comparable("EI30")
     assert _comparable("EN 12207") not in _comparable("EN 12208")
+    assert _comparable("CTB – A") == _comparable("CTB - A")
 
 
 def test_aev_classes_match_with_or_without_stars() -> None:
@@ -550,12 +551,12 @@ def test_standards_lists_repeat_the_first_prefix() -> None:
 
 def test_standards_skip_aliases_and_index_codes() -> None:
     reqs = _extract(
-        "Etanchéité selon le DTU 44.1 (NF P85-210-1).\n\n"
+        "Etanchéité selon le DTU 44.1 (NF P85-210-1) et le DTU 44.1 (FD P85-210-3).\n\n"
         "Norme NF EN 12207 (Indice de classement : P20-302)."
     )
     std = _values(reqs, F.STANDARDS)
     assert "DTU 44.1" in std and "NF EN 12207" in std, std
-    assert not any("85-210" in v or "20-302" in v for v in std), std
+    assert not any("85-210" in v or "20-302" in v for v in std), std  # aliases, index codes
 
 
 def test_numeric_wordings_with_notes_and_slashed_comparators() -> None:
@@ -577,12 +578,12 @@ def test_certification_marks_with_their_scope() -> None:
     reqs = _extract(
         "La certification minimale requise est la certification NF.\n\n"
         "Quincaillerie comportant la marque NF040.\n\n"
-        "Label ACOTHERM AC2 ; bois certifié CTB-B+ ; isolants certifiés ACERMI.\n\n"
+        "Label ACOTHERM AC2 ; bois certifié CTB-B+.\n\n"
         "Paumelles renforcées NF SNFQ laquées ; label EWAA et label ECCA.\n\n"
         "Les fiches environnementales (FDES) et les essais CEBTP seront fournis."
     )
     certs = _values(reqs, F.CERTIFICATIONS)
-    for want in ("NF", "NF040", "ACOTHERM AC2", "CTB-B+", "ACERMI", "NF SNFQ", "EWAA", "ECCA"):
+    for want in ("NF", "NF040", "ACOTHERM AC2", "CTB-B+", "NF SNFQ", "EWAA", "ECCA"):
         assert want in certs, (want, certs)
     assert not {"FDES", "CEBTP", "SNFQ", "ACOTHERM"} & certs, certs
 
@@ -597,5 +598,7 @@ def test_coded_values_of_glazing_colour_and_steel() -> None:
     colours = " | ".join(_values(reqs, F.COLOR))
     assert "RAL 8004" in colours and "RAL 8003" in colours, colours
     assert "Acier" in _values(reqs, F.FRAME_MATERIAL)
+    choice = _extract("Fenêtre type aluminium, PVC ou bois avec double vitrage.")
+    assert {"Aluminium", "PVC", "Bois"} <= _values(choice, F.FRAME_MATERIAL)
     article = _extract("3-08-1 Châssis fixe trapézoïdal avec vitrage feuilleté.")
     assert not _values(article, F.GLAZING_COMPOSITION)
