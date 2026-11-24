@@ -394,3 +394,47 @@ def corpus_split(
     out.write_text(split.model_dump_json(indent=2), encoding="utf-8")
     counts = split.counts()
     console.print(" · ".join(f"{s} {counts[s]}" for s in SPLITS) + f" → {out}")
+
+
+@corpus.command("manifest")
+def corpus_manifest(
+    raw_dir: Annotated[Path, typer.Argument(exists=True, file_okay=False)],
+    leads: Annotated[
+        Path, typer.Option(exists=True, dir_okay=False, help="CSV from `corpus find`")
+    ],
+    out: Annotated[Path, typer.Option("--out", "-o", help="Manifest to write")] = Path(
+        "manifest.csv"
+    ),
+) -> None:
+    """Find the joinery CCTP and DPGF of each downloaded DCE (one folder per idweb).
+
+    Archives are listed, not unpacked: only the chosen documents are copied
+    into ``<idweb>/selected``.
+    """
+    import csv  # noqa: PLC0415
+
+    from zelles.corpus.boamp import _lot_number  # noqa: PLC0415
+    from zelles.corpus.dce import MANIFEST_COLUMNS, inspect_case  # noqa: PLC0415
+
+    with leads.open(newline="", encoding="utf-8") as f:
+        by_id = {row["idweb"]: row for row in csv.DictReader(f)}
+    rows = []
+    for case_dir in sorted(p for p in raw_dir.iterdir() if p.is_dir()):
+        lead = by_id.get(case_dir.name, {})
+        lots = lead.get("joinery_lots", "")
+        numbers = {n for t in lots.split(" | ") if (n := _lot_number(t))}
+        row = {
+            "idweb": case_dir.name,
+            "buyer": lead.get("buyer", ""),
+            "departments": lead.get("departments", ""),
+            "joinery_lots": lots,
+        }
+        row.update(inspect_case(case_dir, numbers))
+        rows.append(row)
+        console.print(f"{row['idweb']:<12} {row['status']:<13} {row['how']:<8} {row['cctp'][-70:]}")
+    with out.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=MANIFEST_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+    ok = sum(r["status"] == "ok" for r in rows)
+    console.print(f"{ok}/{len(rows)} with a joinery CCTP → {out}")
