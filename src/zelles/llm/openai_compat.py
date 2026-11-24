@@ -133,7 +133,8 @@ class OpenAICompatibleLLM:
         schema: type[T] | None = None,
         max_tokens: int | None = None,
     ) -> Completion[T]:
-        chat: list[dict[str, str]] = [{"role": "system", "content": system}]
+        # Extraction models such as NuExtract take no system prompt: send none when empty.
+        chat: list[dict[str, str]] = [{"role": "system", "content": system}] if system else []
         chat += [{"role": m.role, "content": m.content} for m in messages]
         usage = Usage()
         started = time.perf_counter()
