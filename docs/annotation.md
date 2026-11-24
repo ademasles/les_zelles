@@ -121,6 +121,10 @@ Settled while keying the 12 train tenders. Each one is now a rule.
   keyed (a contradiction, not boilerplate).
 - **Air inlets from another lot.** When the joinery lot fits inlets another lot
   supplies, the fitting is keyed under `air_inlets`.
+- **Interior doors.** In an exterior joinery lot, only openings in the
+  building envelope are keyed. Interior doors (WC, technical rooms, fire
+  doors between rooms) and their hardware are left out, unless the lot also
+  covers interior joinery.
 - **Existing joinery.** Work on existing joinery or cladding is not keyed, but
   existing hardware re-used on the new joinery (`crémones existantes`) is keyed
   under `hardware`.
@@ -147,6 +151,10 @@ Settled while keying the 12 train tenders. Each one is now a rule.
 - PMR requirements (threshold height, handle height and type, glazing
   markings, operating force) go under `accessibility`, one entry each, and are
   not repeated under `hardware`.
+- `opening_type` holds how an opening opens, one entry per type as written:
+  `oscillo-battant`, `coulissant`, `châssis fixe`, `soufflet`, `porte à 2
+  vantaux`. Not the item's full description (`Porte vitrée à 2 vantaux égaux
+  en aluminium`), and not its shape.
 - Smoke-vent sashes go under `opening_type`. Wood profile shapes (`mouton et
   gueule de loup`) and `petits bois` go under `profile_system`.
 - Performance classes awarded by a certification scheme, and acoustic `AC`
@@ -181,6 +189,9 @@ Settled while keying the 12 train tenders. Each one is now a rule.
   code. "Peinture blanche" gives a `finish` (`peinture`) and a `color`
   (`blanche`).
 - **Hardware models** are written with their part (`ferme-porte DC700`).
+  A hardware entry is the part with the words that identify it (model, maker,
+  finish, function), cut at the first clause that adds another part or a
+  location: `crémone pompier Vachette`, not the whole sentence.
 
 ## Process
 
@@ -204,7 +215,8 @@ Settled while keying the 12 train tenders. Each one is now a rule.
 
 - **2026-11-24:** the validation annotator's doubts settled (certification
   classes, partial thermal values, drives, thresholds, one value in two
-  notations).
+  notations), and the three fields where two annotators agreed least on a
+  re-keyed train tender (`opening_type`, interior doors, hardware spans).
 - **2026-11-19:** edge cases settled while keying the 12 train tenders (mixed
   lots, general chapters, options, permissions, figures without a field,
   standard lists, colours, hardware models), fire classes under `fire_rating`
