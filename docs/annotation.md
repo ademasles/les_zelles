@@ -202,10 +202,12 @@ Settled while keying the 12 train tenders. Each one is now a rule.
 
 ## Change log
 
+- **2026-11-24:** the validation annotator's doubts settled (certification
+  classes, partial thermal values, drives, thresholds, one value in two
+  notations).
 - **2026-11-19:** edge cases settled while keying the 12 train tenders (mixed
   lots, general chapters, options, permissions, figures without a field,
-  standard lists, colours, hardware models), the validation annotator's doubts
-  (certification classes, partial thermal values, drives, thresholds), fire classes under `fire_rating`
+  standard lists, colours, hardware models), fire classes under `fire_rating`
   (#40), and validation keys written without a draft. The nine original keys
   predate these rules and are not updated.
 - **2026-11-17:** test keys are written without a draft.
