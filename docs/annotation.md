@@ -111,6 +111,16 @@ Settled while keying the 12 train tenders. Each one is now a rule.
 - **Permissions.** A value the CCTP only allows ("pourra être utilisé",
   "possibilité de") is not a requirement and is not keyed. Standards are the
   exception (below).
+- **Thresholds and alternatives.** A device required only above a threshold
+  the tender does not reach is not keyed. Alternatives left to the architect
+  are all keyed. A generic list of types that no article uses is not keyed (its
+  standards are). An annex of indicative products declared non-contractual is
+  not keyed.
+- **General clause against the articles.** When a general clause states a
+  material as a direct requirement and the articles contradict it, both are
+  keyed (a contradiction, not boilerplate).
+- **Air inlets from another lot.** When the joinery lot fits inlets another lot
+  supplies, the fitting is keyed under `air_inlets`.
 - **Existing joinery.** Work on existing joinery or cladding is not keyed, but
   existing hardware re-used on the new joinery (`crémones existantes`) is keyed
   under `hardware`.
@@ -139,6 +149,17 @@ Settled while keying the 12 train tenders. Each one is now a rule.
   not repeated under `hardware`.
 - Smoke-vent sashes go under `opening_type`. Wood profile shapes (`mouton et
   gueule de loup`) and `petits bois` go under `profile_system`.
+- Performance classes awarded by a certification scheme, and acoustic `AC`
+  classes with no figure, go under `certifications` as written (under
+  `shutters` when they rate a shutter box).
+- Partial thermal values: a frame-only `Uf` is text under `profile_system`;
+  the U-value of an opaque infill panel is not keyed. A glass `TL` or `RL` is
+  text under `glazing_type`, like `Sg`.
+- Opening drives and automation (window motors, natural-ventilation controls,
+  automatic or sectional door drives) go under `hardware`. A smoke vent's
+  mechanism and product name go under `opening_type` with the sash.
+- A door's durability or traffic class has no field yet: text under
+  `profile_system`.
 - A single pane's thickness (`4 mm`) goes under `glazing_composition` only when
   it is the whole build-up.
 
@@ -150,6 +171,10 @@ Settled while keying the 12 train tenders. Each one is now a rule.
   prefix is split, repeating the prefix as the first code writes it:
   `NF P 85-530/540` gives `NF P 85-530` and `NF P 85-540`, and
   `D.T.U. n° 39.1, 39.4` gives `D.T.U. n° 39.1` and `D.T.U. n° 39.4`.
+- **One value, two notations.** A standard or a build-up written twice in
+  two notations is one entry. A code with several revision years is one entry
+  as written. Alternative classes ("B-s2,d0 ou M1") are one `fire_rating` entry
+  as written.
 - **Tables.** Each distinct value in a table is its own entry (`33.2`, `44.2`,
   `55.2`, `66.2`).
 - **Colours.** A colour name given with its RAL code is one entry, the RAL
@@ -179,7 +204,8 @@ Settled while keying the 12 train tenders. Each one is now a rule.
 
 - **2026-11-19:** edge cases settled while keying the 12 train tenders (mixed
   lots, general chapters, options, permissions, figures without a field,
-  standard lists, colours, hardware models), fire classes under `fire_rating`
+  standard lists, colours, hardware models), the validation annotator's doubts
+  (certification classes, partial thermal values, drives, thresholds), fire classes under `fire_rating`
   (#40), and validation keys written without a draft. The nine original keys
   predate these rules and are not updated.
 - **2026-11-17:** test keys are written without a draft.
