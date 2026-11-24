@@ -31,6 +31,7 @@ from zelles.extraction.rules import describes_existing, sentences
 from zelles.extraction.verify import mentions_field
 from zelles.ingest.cleaning import normalize_for_match
 from zelles.llm.base import LLM, Completion, LLMError, Message
+from zelles.retrieval.text import comparable
 
 log = logging.getLogger(__name__)
 F = SpecField
@@ -170,3 +171,24 @@ class SpanReader:
                 return []
         outcome.usage.add(reply.usage)
         return spans_to_requirements(chunk, parse_reply(reply.text))
+
+
+def combine_with_rules(rules: list[Requirement], read: list[Requirement]) -> list[Requirement]:
+    """The reader's spans, plus the rules' values for its fields that no span restates.
+
+    A rule value that a span of the same field contains, or that contains the span, is
+    the same requirement in other words: the span is kept. Any other rule value stays,
+    so an article the reader skipped or answered empty loses nothing.
+    """
+    reader_fields = set(READER_FIELDS.values())
+    spans: dict[SpecField, list[str]] = {}
+    for req in read:
+        spans.setdefault(req.field, []).append(comparable(req.value))
+    kept: list[Requirement] = []
+    for req in rules:
+        if req.field in reader_fields:
+            value = comparable(req.value)
+            if any(value in span or span in value for span in spans.get(req.field, [])):
+                continue
+        kept.append(req)
+    return kept + read

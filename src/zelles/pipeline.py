@@ -28,7 +28,7 @@ from zelles.extraction.merge import merge_requirements
 from zelles.extraction.prompts import SUMMARY_SYSTEM
 from zelles.extraction.rules import extract_with_rules
 from zelles.extraction.scope import focus_on_joinery
-from zelles.extraction.span_reader import READER_FIELDS, SpanReader
+from zelles.extraction.span_reader import SpanReader, combine_with_rules
 from zelles.extraction.verify import verify_requirement
 from zelles.graph.knowledge import KnowledgeGraph, build_graph
 from zelles.ingest.chunking import chunk_document
@@ -173,14 +173,12 @@ async def _read_articles(
     usage: Usage,
     warnings: list[str],
 ) -> list[Requirement]:
-    """The reader's spans replace the rules' values for the free-text fields."""
+    """The reader's spans for the free-text fields, plus the rule values they miss."""
     read = await SpanReader(llm, concurrency=settings.llm_concurrency).read(chunks)
     usage.add(read.usage)
     if read.errors:
         warnings.append(f"{len(read.errors)} of {read.articles_read} articles failed to read.")
-    reader_fields = set(READER_FIELDS.values())
-    kept = [r for r in rule_reqs if r.field not in reader_fields]
-    return kept + read.requirements  # already grounded span by span
+    return combine_with_rules(rule_reqs, read.requirements)
 
 
 async def _summarize(llm: LLM, sheet: SpecSheet, usage: Usage) -> str | None:

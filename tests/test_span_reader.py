@@ -6,10 +6,11 @@ import json
 from typing import Any
 
 from zelles.config import Settings
-from zelles.domain.spec import SpecField
+from zelles.domain.spec import Requirement, SpecField
 from zelles.extraction.span_reader import (
     READER_FIELDS,
     SpanReader,
+    combine_with_rules,
     parse_reply,
     worth_reading,
 )
@@ -72,13 +73,24 @@ async def test_spans_missing_from_the_article_are_dropped() -> None:
     assert all(system == "" for system, _ in llm.calls)  # no system prompt for NuExtract
 
 
-async def test_article_mode_replaces_rules_for_free_text_fields_only() -> None:
+async def test_article_mode_keeps_rule_values_the_reader_does_not_restate() -> None:
     settings = Settings(llm_reader="articles", joinery_focus=False)
     analysis = await analyze(
         CCTP.encode(), "cctp.md", settings=settings, llm=FakeLLM(_reply), summarize=True
     )
     reqs = analysis.sheet.requirements
     hardware = {r.value for r in reqs if r.field == F.HARDWARE}
-    assert hardware == {"crémone pompier Vachette", "paumelles renforcées"}
+    assert {"crémone pompier Vachette", "paumelles renforcées"} <= hardware
+    assert not any(v.lower() in {"crémone", "crémone pompier"} for v in hardware), hardware
     assert any(r.field == F.UW and r.numeric_value == 1.3 for r in reqs)  # rules keep codes
     assert analysis.sheet.summary is None  # an extraction model writes no brief
+
+
+def test_combine_keeps_rule_values_no_span_restates() -> None:
+    def req(field: SpecField, value: str) -> Requirement:
+        return Requirement(field=field, value=value)
+
+    rules = [req(F.SHUTTERS, "volet roulant"), req(F.SHUTTERS, "manivelle"), req(F.UW, "1.3")]
+    read = [req(F.SHUTTERS, "volet roulant électrique")]
+    combined = {r.value for r in combine_with_rules(rules, read)}
+    assert combined == {"volet roulant électrique", "manivelle", "1.3"}
