@@ -406,7 +406,7 @@ def test_glass_set_in_a_rebate_is_no_installation() -> None:
     assert _values(frame, F.INSTALLATION)
 
 
-def test_hardware_values_end_before_a_second_part_or_the_supplier() -> None:
+def test_hardware_values_end_before_a_second_part_and_keep_the_maker() -> None:
     reqs = _extract(
         "Condamnation par crémone encastrée avec poignée à lever en fourche.\n\n"
         'Crémone "pompier" en applique sur vantail semi-fixe.'
@@ -418,7 +418,8 @@ def test_hardware_values_end_before_a_second_part_or_the_supplier() -> None:
     supplier = _values(
         _extract("Poignée de manceuvre laquée des Ets Durand ou équivalent."), F.HARDWARE
     )
-    assert "Poignée de manœuvre laquée" in supplier, supplier  # OCR slip mended, supplier cut
+    # OCR slip mended; the maker identifies the part, "ou équivalent" does not
+    assert "Poignée de manœuvre laquée des Ets Durand" in supplier, supplier
 
 
 def test_hardware_parts_named_in_a_fitting_list() -> None:
@@ -602,3 +603,84 @@ def test_coded_values_of_glazing_colour_and_steel() -> None:
     assert {"Aluminium", "PVC", "Bois"} <= _values(choice, F.FRAME_MATERIAL)
     article = _extract("3-08-1 Châssis fixe trapézoïdal avec vitrage feuilleté.")
     assert not _values(article, F.GLAZING_COMPOSITION)
+
+
+def test_hardware_parts_keep_their_qualifiers_to_the_clause_end() -> None:
+    reqs = _extract(
+        "Quincaillerie :\n\n"
+        "- Gâches en Zamak ou en PA 66 chargé de fibres de verre ;\n"
+        "- béquille formant butoir au sol et permettant le maintien de la porte ouverte ;\n"
+        "- Paumelles en acier bichromaté laqué, de teinte blanche ;\n"
+        "- Ferme-porte à glissière intégré au dormant de porte de chez Dorma ou équivalent ;\n"
+        "- Gâche électrique suivant tableau de menuiseries."
+    )
+    hardware = _values(reqs, F.HARDWARE)
+    for want in (
+        "béquille formant butoir au sol",
+        "Paumelles en acier bichromaté laqué",
+        "Ferme-porte à glissière intégré au dormant de porte de chez Dorma",
+        "Gâche électrique",
+    ):
+        assert want in hardware, (want, hardware)
+
+
+def test_items_listed_under_a_shutter_article() -> None:
+    reqs = _extract(
+        "Les volets seront composés de :\n\n"
+        "- tablier composé de lames en aluminium double paroi avec mousse isolante ;\n"
+        "- La motorisation électrique avec fins de course ;\n"
+        "- verrouillage automatique du volet en position fermée",
+        heading="4.2 Volets roulants",
+    )
+    shutters = " | ".join(_values(reqs, F.SHUTTERS))
+    for want in (
+        "lames en aluminium double paroi",
+        "motorisation électrique",
+        "verrouillage automatique",
+    ):
+        assert want in shutters, (want, shutters)
+    store = _extract("Toile acrylique sur store à projection motorisé.")
+    assert any("store à projection" in v.lower() for v in _values(store, F.SHUTTERS))
+
+
+def test_removal_and_no_values_from_document_lists_or_list_titles() -> None:
+    reqs = _extract("La dépose des portes et volets roulants existants est due au présent lot.")
+    installation = " | ".join(_values(reqs, F.INSTALLATION))
+    for want in ("dépose des portes",):
+        assert want in installation, (want, installation)
+    documents = _extract("Fournir les fiches techniques des serrures, mastics et paumelles.")
+    assert not _values(documents, F.HARDWARE)
+    title = _extract("Tablier :\n- lames en aluminium", heading="4.2 Volets roulants")
+    assert "Tablier" not in _values(title, F.SHUTTERS)
+
+
+def test_finish_species_and_coatings_of_the_joinery() -> None:
+    reqs = _extract(
+        "Bois : mélèze ou eucalyptus lasuré teinte au choix de l'Architecte.\n\n"
+        "Finition laquée par poudre polyester thermodurcissable sur une épaisseur de 80 microns, "
+        "aspect satiné."
+    )
+    finish = " | ".join(_values(reqs, F.FINISH))
+    for want in ("mélèze", "eucalyptus", "poudre polyester thermodurcissable", "aspect satiné"):
+        assert want in finish, (want, finish)
+    handle = _extract("Poignées en aluminium anodisé sur les fenêtres.")
+    assert not _values(handle, F.FINISH)
+
+
+def test_profile_makers_glazing_bars_and_traditional_profiles() -> None:
+    reqs = _extract(
+        "Les ensembles menuisés proviendront de fournisseurs réputés tel que BIEBER, LORILLARD "
+        "ou techniquement équivalent.\n\n"
+        "Porte isolante simple action (WICSTYLE 65FP ou techniquement équivalent).\n\n"
+        "- Petits bois rapportés face interne selon plans.\n\n"
+        "Profils traditionnels à mouton et gueule de loup."
+    )
+    profiles = " | ".join(_values(reqs, F.PROFILE_SYSTEM))
+    for want in (
+        "BIEBER",
+        "LORILLARD",
+        "WICSTYLE 65FP",
+        "Petits bois rapportés face interne",
+        "mouton et gueule de loup",
+    ):
+        assert want in profiles, (want, profiles)
