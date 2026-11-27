@@ -8,7 +8,7 @@ from zelles.extraction.rules import extract_with_rules
 from zelles.ingest.cleaning import clean_text
 from zelles.ingest.furniture import is_toc_line, strip_furniture
 from zelles.ingest.outline import detect_heading
-from zelles.ingest.parsers import lines_from_chars
+from zelles.ingest.parsers import _blocks_from_lines, lines_from_chars
 
 
 def test_word_hyphen_codes_and_symbol_bullets_are_kept() -> None:
@@ -219,3 +219,116 @@ def test_air_inlet_attenuation_is_not_facade_acoustics() -> None:
     found = _extract("Entrée d'air hygro-régulée, affaiblissement acoustique 37 dB.")
     assert SpecField.ACOUSTIC not in found
     assert any("37 dB" in v for v in found[SpecField.AIR_INLETS])
+
+
+def test_a_deep_item_heading_that_runs_on_into_its_size() -> None:
+    heading = detect_heading("3.4.2.1. Châssis repère A de 1800 x 1350 mm environ, comprenant")
+    assert heading is not None and heading.label == "3.4.2.1 Châssis repère A"
+    assert heading.rest.startswith("de 1800 x 1350 mm")
+    # a shallow numbered line with a quantity is still a list item
+    assert detect_heading("3 PC 16 A avec terre, fermées par clapet étanche") is None
+
+
+def test_capital_labels_inside_an_article_are_not_headings() -> None:
+    assert detect_heading("LOCALISATION") is None
+    assert detect_heading("NOTA :") is None
+    assert detect_heading("MENUISERIES EXTERIEURES") is not None
+
+
+def test_an_article_number_printed_apart_from_its_title() -> None:
+    blocks = _blocks_from_lines(
+        [
+            _line("Localisation : préau.", 600),
+            _line("Porte vitrée à deux vantaux - Finition laquée", 614),
+            _line("gris clair", 625),
+            _line("02.3.4", 614),
+            _line("Fourniture et pose de la porte.", 642),
+        ],
+        6,
+    )
+    kinds = [(b.kind.value, b.text) for b in blocks]
+    assert (
+        "heading",
+        "02.3.4 Porte vitrée à deux vantaux - Finition laquée gris clair",
+    ) in kinds, kinds
+    assert kinds[0] == ("paragraph", "Localisation : préau.")
+    # the number may also come first on the row
+    first = _blocks_from_lines([_line("02.3.5", 300), _line("Bloc-porte plein", 300)], 1)
+    assert [(b.kind.value, b.text) for b in first] == [("heading", "02.3.5 Bloc-porte plein")]
+
+
+def test_run_on_text_stays_with_its_heading() -> None:
+    blocks = _blocks_from_lines(
+        [_line("6.1.3.2. Porte de service à un vantail de (900+300) x 2100 m environ", 100)], 17
+    )
+    assert [(b.kind.value, b.text) for b in blocks] == [
+        ("heading", "6.1.3.2 Porte de service à un vantail"),
+        ("paragraph", "de (900+300) x 2100 m environ"),
+    ]
+
+
+def test_a_long_run_on_item_line_is_still_a_heading() -> None:
+    line = (
+        "3.4.2.2. Châssis repère B de 2400 x 1600 mm environ, comprenant une partie fixe "
+        "en allège et deux ouvrants à la française en partie haute, avec traverse "
+        "intermédiaire et vitrage isolant"
+    )
+    assert len(line) > 160
+    heading = detect_heading(line)
+    assert heading is not None and heading.label == "3.4.2.2 Châssis repère B"
+
+
+def test_a_list_line_in_capitals_is_not_a_heading() -> None:
+    assert detect_heading('- "SALLE DES FETES"') is None
+    assert detect_heading("- ACCUEIL DU PUBLIC") is None
+
+
+def test_an_unnumbered_title_closes_with_its_numbered_article() -> None:
+    from zelles.domain.documents import Block, BlockKind, ParsedDocument
+    from zelles.ingest.chunking import chunk_document
+
+    def h(text: str, level: int) -> Block:
+        return Block(kind=BlockKind.HEADING, text=text, heading_level=level)
+
+    def para(text: str) -> Block:
+        return Block(text=text)
+
+    doc = ParsedDocument(
+        filename="cctp.pdf",
+        media_type="application/pdf",
+        blocks=[
+            h("5.1.2 Protections solaires", 3),
+            h("BRISE SOLEIL ORIENTABLE", 1),
+            para("Lames de 80 mm."),
+            h("5.1.2.1 Ensemble BSO", 4),
+            para("Manœuvre électrique."),
+            h("5.2 Serrurerie", 2),
+            para("Portes en acier."),
+        ],
+    )
+    paths = [c.section_path for c in chunk_document(doc)]
+    assert paths == [
+        ["5.1.2 Protections solaires", "BRISE SOLEIL ORIENTABLE"],
+        ["5.1.2 Protections solaires", "BRISE SOLEIL ORIENTABLE", "5.1.2.1 Ensemble BSO"],
+        ["5.2 Serrurerie"],
+    ], paths
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "12 Rue des Lilas - 12345 BOURGVILLE - contact",
+        "3 Avenue des Tilleuls",
+        "54321 VALMONT",
+        "98 765 SAINT EXEMPLE SUR LOIRE",
+        "10000001-A1-01-XX-PLN_V1 BAT A 01/01/2026",
+        "800x1200 // TEINTE",
+    ],
+)
+def test_title_block_lines_are_not_headings(line: str) -> None:
+    assert detect_heading(line) is None
+
+
+def test_headings_with_standards_or_sizes_are_kept() -> None:
+    assert detect_heading("3.2 Fenêtres conformes à la NF EN 14351") is not None
+    assert detect_heading("CHAPITRE 2 - CLAUSES COMMUNES") is not None
