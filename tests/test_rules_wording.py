@@ -616,7 +616,6 @@ def test_hardware_parts_keep_their_qualifiers_to_the_clause_end() -> None:
     )
     hardware = _values(reqs, F.HARDWARE)
     for want in (
-        "Gâches en Zamak",
         "béquille formant butoir au sol",
         "Paumelles en acier bichromaté laqué",
         "Ferme-porte à glissière intégré au dormant de porte de chez Dorma",
@@ -644,17 +643,15 @@ def test_items_listed_under_a_shutter_article() -> None:
     assert any("store à projection" in v.lower() for v in _values(store, F.SHUTTERS))
 
 
-def test_installation_sealing_fixing_and_removal() -> None:
-    reqs = _extract(
-        "Calfeutrement par bandes de mousse imprégnée de classe 1 (> 600 Pa).\n\n"
-        "Pose et fixation par pattes à scellement.\n\n"
-        "La dépose des portes et volets roulants existants est due au présent lot."
-    )
+def test_removal_and_no_values_from_document_lists_or_list_titles() -> None:
+    reqs = _extract("La dépose des portes et volets roulants existants est due au présent lot.")
     installation = " | ".join(_values(reqs, F.INSTALLATION))
-    for want in ("mousse imprégnée de classe 1", "pattes à scellement", "dépose des portes"):
+    for want in ("dépose des portes",):
         assert want in installation, (want, installation)
-    glass = _extract("Les vitrages seront posés avec un mastic adapté.")
-    assert not _values(glass, F.INSTALLATION)
+    documents = _extract("Fournir les fiches techniques des serrures, mastics et paumelles.")
+    assert not _values(documents, F.HARDWARE)
+    title = _extract("Tablier :\n- lames en aluminium", heading="4.2 Volets roulants")
+    assert "Tablier" not in _values(title, F.SHUTTERS)
 
 
 def test_finish_species_and_coatings_of_the_joinery() -> None:

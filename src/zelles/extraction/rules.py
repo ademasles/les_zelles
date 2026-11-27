@@ -598,7 +598,7 @@ RULES: list[Rule] = [
             r"(?<=\n)[-*•–]?\s*((?:la\s+|le\s+|les\s+)?(?:motorisation|moteurs?|tabliers?|lames?|coulisses?|"
             r"commandes?|inverseurs?|verrouillages?|treuils?|sangles?|manivelles?|fins?\s+de\s+course|"
             r"capteurs?|anémomètres?|stations?\s+météo|automatismes?|télécommandes?|lame\s+finale)"
-            r"\b[^;\n]{0,80})",
+            r"\b(?!\s*:)[^;\n]{3,80})",
             _I,
         ),
         0.6,
@@ -708,17 +708,6 @@ RULES: list[Rule] = [
         0.75,
         # a standard's title in a reference list: "DTU 37.2 : … en rénovation sur dormant existant"
         excludes=re.compile(r"\bD\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?\s*[:/–]", _I),
-    ),
-    Rule(  # sealing and fixing of the frame: "mousse imprégnée de classe 1", "pattes à scellement"
-        F.INSTALLATION,
-        re.compile(
-            r"\b(?:mousses?\s+imprégnées?|compri-?band\w*|mastics?|précadres?|bavettes?|"
-            r"pat(?:t)?es?\s+(?:à\s+scellement|de\s+fixation)|joints?\s+(?:souples?|portefeuille|de\s+calfeutrement)|"
-            r"fixations?\s+(?:mécaniques?|par\s+vis|invisibles?)|couvre-?\s?joints?)\b[^.;,\n]{0,60}",
-            _I,
-        ),
-        0.6,
-        excludes=re.compile(rf"{_GLASS_SUBJECT.pattern}|parclose|volets?|coffres?", _I),
     ),
     Rule(  # removal of the old joinery: "La dépose des portes, fenêtres ou volets existants"
         F.INSTALLATION,
@@ -979,6 +968,12 @@ _DESCRIPTIVE = frozenset(
         F.INSTALLATION,
     }
 )
+# A list of documents to hand over names products without requiring them.
+_DOCUMENT_LIST = re.compile(
+    r"fiches?\s+techniques|documents?\s+à\s+fournir|plans?\s+de\s+repérage|\bDOE\b|notices?\s+d|"
+    r"soudures?|platines?",
+    _I,
+)
 _REFERENCE_ITEM = re.compile(
     r"^\W*(?:NF\b|N\.\s?F\.|EN\s?\d|ISO\s?\d|D\.?\s?T\.?\s?U\b|[PBA]\s?\d{2}[.\-]\d)"
 )
@@ -1080,7 +1075,9 @@ def _keep(
     if rule.before_requires is not None and not rule.before_requires.search(before):
         return False
     if rule.field in _DESCRIPTIVE and (
-        _REFERENCE_ITEM.search(sentence) or any(a <= match.start() < b for a, b in outside_lot)
+        _REFERENCE_ITEM.search(sentence)
+        or _DOCUMENT_LIST.search(sentence)
+        or any(a <= match.start() < b for a, b in outside_lot)
     ):
         return False
     word = match.group(0).lower()
@@ -1177,10 +1174,7 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                 )
                 key = req.dedupe_key()
                 if rule.field in _ONE_PER_ARTICLE:
-                    # hardware parts now carry their qualifiers: two gâches in one article
-                    # ("en Zamak", "électrique") are two parts, one per sentence is enough
-                    where = f"{chunk.id}:{sentence}" if rule.field == F.HARDWARE else chunk.id
-                    slot = (rule.field, f"{where}:{_slot_word(value)}")
+                    slot = (rule.field, f"{chunk.id}:{_slot_word(value)}")
                     previous = per_slot.get(slot)
                     if previous is not None and previous in found:
                         # Keep the most informative value for this sentence.
