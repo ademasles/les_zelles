@@ -104,10 +104,11 @@ _HARDWARE_SUBJECT = re.compile(
     r"ventouses?|béquilles?|paumelles?|bandeaux?|limiteurs?|butées?",
     _I,
 )
-# One character of a hardware part's description. The description ends where a second
-# part is joined on ("crémone … avec poignée …") or the supplier is named
-# ("… des Etablissements X", "… de chez X"): those start another statement.
-_HW = r"(?:(?!\s+(?:avec|des\s+(?:Ets|[EÉ]tablissements)|de\s+chez)\b)[^.;,\n])"
+# One character of a hardware part's description. The description keeps the part's
+# material, model and maker ("paumelles en acier bichromaté laqué", "… de chez Dorma") and
+# ends where a second part or another clause starts ("… avec poignée", "… et permettant",
+# "… ou équivalent", "… suivant tableau").
+_HW = r"(?:(?!\s+(?:avec|et|ou|pour|suivant|selon|compris)\b)[^.;,\n])"
 _SEAL_SUBJECT = re.compile(r"\bjoints?\b|\bmousses?\b|\bbandes?\b|calfeutrement|compriband", _I)
 _PRODUCT_NOT_PROFILE = re.compile(
     rf"{_GLASS_SUBJECT.pattern}|{_SHUTTER_SUBJECT.pattern}|{_HARDWARE_SUBJECT.pattern}|"
@@ -434,6 +435,27 @@ RULES: list[Rule] = [
         0.65,
         excludes=_PRODUCT_NOT_PROFILE,
     ),
+    Rule(  # joinery system makers and their ranges: "TECHNAL", "gamme SOLEAL", "WICSTYLE 65FP"
+        F.PROFILE_SYSTEM,
+        re.compile(
+            r"\b(?:TECHNAL|SCH[ÜU]CO|REYNAERS|KAWNEER|WICONA|SAPA|K-?LINE|INSTALLUX|ALUK|K[ÖO]MMERLING|"
+            r"REHAU|VEKA|PROFINE|DECEUNINCK|BIEBER|LORILLARD|MILLET|MINCO|TRYBA|JANNEAU|INTERNORM|JANSEN|"
+            r"FORSTER|SEPALUMIC|SOLEAL|LUMEAL|GALENE|WICLINE|WICSTYLE)\b(?:\s?\d{2,3}\s?[A-Z]{0,3}\b)?",
+            _I,
+        ),
+        0.65,
+        excludes=re.compile(r"entr[ée]es?\s+d'air|stores?|volets?", _I),
+    ),
+    Rule(  # glazing bars and traditional wood profiles
+        F.PROFILE_SYSTEM,
+        re.compile(
+            r"\bpetits?\s+bois(?:\s+(?:rapportés|collés|incorporés|intégrés|traversants?))?"
+            r"(?:\s+face\s+(?:interne|externe|intérieure|extérieure))?|\bmouton\s+et\s+gueule\s+de\s+loup\b",
+            _I,
+        ),
+        0.65,
+        in_heading=True,
+    ),
     Rule(
         F.PROFILE_SYSTEM,
         re.compile(
@@ -482,6 +504,25 @@ RULES: list[Rule] = [
             _I,
         ),
     ),
+    Rule(  # the wood species and the coating: "mélèze lasuré", "poudre polyester …", "Traitement IFH"
+        F.FINISH,
+        re.compile(
+            r"\b(?:chêne|mélèze|eucalyptus|pin\s+sylvestre|douglas|méranti|moabi|niangon|sipo|iroko|"
+            r"red\s+cedar|épicéa|sapin|bois\s+exotique)\b|\bfinition\s+(?:peinte|laquée|lasurée|vernie)"
+            r"[^.;,\n]{0,40}|\bpoudre\s+polyester[^.;,\n]{0,60}|\baspect\s+(?:satiné|mat|brillant|sablé)\b|"
+            r"\btraitement\s+(?:IFH|fongicide|insecticide)[^.;,\n]{0,40}|\balu(?:minium)?\s+anodisé\b",
+            _I,
+        ),
+        0.6,
+        requires=re.compile(
+            r"menuiseries?|bois|profil|châssis|fenêtres?|portes?|dormants?|ouvrants?|finition", _I
+        ),
+        excludes=re.compile(
+            r"volets?|\blames?\b|tabliers?|coffres?|quincaillerie|poignées?|paumelles?|ferme-?\s?portes?"
+            r"|charpente|parquet|bardage",
+            _I,
+        ),
+    ),
     Rule(  # a varnish is a finish only when it is applied to the joinery, not a site protection
         F.FINISH,
         re.compile(r"\bvernis\b[^.;,\n]{0,25}", _I),
@@ -499,7 +540,7 @@ RULES: list[Rule] = [
     Rule(
         F.HARDWARE,
         re.compile(
-            rf"\b(?:crémone{_HW}{{0,45}}|paumelles?{_HW}{{0,30}}|ferme-porte{_HW}{{0,40}}|poignées?{_HW}{{0,40}}|renvois?\s+d'angle{_HW}{{0,30}}|barres?\s+de\s+man(?:œ|oe)uvre{_HW}{{0,30}}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{{0,30}})",
+            rf"\b(?:crémone(?:-serrure)?{_HW}{{0,60}}|paumelles?{_HW}{{0,50}}|ferme-?\s?portes?{_HW}{{0,60}}|poignées?{_HW}{{0,50}}|renvois?\s+d'angle{_HW}{{0,30}}|barres?\s+de\s+man(?:œ|oe)uvre{_HW}{{0,30}}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{{0,30}})",
             _I,
         ),
         0.6,
@@ -507,7 +548,7 @@ RULES: list[Rule] = [
     Rule(  # further hardware named in a fitting list
         F.HARDWARE,
         re.compile(
-            r"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|bandeaux?\s+ventouses?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|contacteurs?\s+à\s+cl[ée]f?s?|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette|rosettes?|cylindres?|butées?|sélecteurs?\s+de\s+vantail|supports?\s+d'angle|ailes?\s+de\s+préhension|ferrures)\b",
+            rf"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|bandeaux?\s+ventouses?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|contacteurs?\s+à\s+cl[ée]f?s?|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette|rosettes?|cylindres?|butées?|sélecteurs?\s+de\s+vantail|supports?\s+d'angle|ailes?\s+de\s+préhension|ferrures|arrêts?\s+de\s+portes?|verrous?)\b{_HW}{{0,60}}",
             _I,
         ),
         0.6,
@@ -534,7 +575,7 @@ RULES: list[Rule] = [
     Rule(
         F.SHUTTERS,
         re.compile(
-            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))(?:(?!\s+(?:pour|avec)\b)[^.;\n]){0,40}",
+            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?|à\s+projection|à\s+l'italienne|enrouleurs?|screens?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))(?:(?!\s+(?:pour|avec)\b)[^.;\n]){0,40}",
             _I,
         ),
         0.65,
@@ -550,6 +591,22 @@ RULES: list[Rule] = [
         0.6,
         requires=_SHUTTER_SUBJECT,
         excludes=re.compile(r"facteur\s+solaire|\bSw\b|entr[ée]es?\s+d'air", _I),
+    ),
+    Rule(  # an item listed under a shutter article: "- tablier composé de lames …", "- motorisation …"
+        F.SHUTTERS,
+        re.compile(
+            r"(?<=\n)[-*•–]?\s*((?:la\s+|le\s+|les\s+)?(?:motorisation|moteurs?|tabliers?|lames?|coulisses?|"
+            r"commandes?|inverseurs?|verrouillages?|treuils?|sangles?|manivelles?|fins?\s+de\s+course|"
+            r"capteurs?|anémomètres?|stations?\s+météo|automatismes?|télécommandes?|lame\s+finale)"
+            r"\b[^;\n]{0,80})",
+            _I,
+        ),
+        0.6,
+        heading_requires=re.compile(
+            r"volets?|stores?|brise-?\s?soleil|BSO|persiennes?|protections?\s+solaires?|occultations?",
+            _I,
+        ),
+        normalize=lambda m: m.group(1).strip(" ;:,"),
     ),
     Rule(  # decorative or fixed shutters, motors, anti-lift locks, named makers
         F.SHUTTERS,
@@ -651,6 +708,25 @@ RULES: list[Rule] = [
         0.75,
         # a standard's title in a reference list: "DTU 37.2 : … en rénovation sur dormant existant"
         excludes=re.compile(r"\bD\.?\s?T\.?\s?U\.?\s*(?:N°\s*)?\d+(?:\.\d+)?\s*[:/–]", _I),
+    ),
+    Rule(  # sealing and fixing of the frame: "mousse imprégnée de classe 1", "pattes à scellement"
+        F.INSTALLATION,
+        re.compile(
+            r"\b(?:mousses?\s+imprégnées?|compri-?band\w*|mastics?|précadres?|bavettes?|"
+            r"pat(?:t)?es?\s+(?:à\s+scellement|de\s+fixation)|joints?\s+(?:souples?|portefeuille|de\s+calfeutrement)|"
+            r"fixations?\s+(?:mécaniques?|par\s+vis|invisibles?)|couvre-?\s?joints?)\b[^.;,\n]{0,60}",
+            _I,
+        ),
+        0.6,
+        excludes=re.compile(rf"{_GLASS_SUBJECT.pattern}|parclose|volets?|coffres?", _I),
+    ),
+    Rule(  # removal of the old joinery: "La dépose des portes, fenêtres ou volets existants"
+        F.INSTALLATION,
+        re.compile(
+            r"\bdépose\s+(?:des?|du)\s+(?:portes?|fenêtres?|volets?|menuiseries|châssis)\b", _I
+        ),
+        0.65,
+        requires=re.compile(r"existant", _I),
     ),
     Rule(  # rebate fixing of the frame; glass set in a rebate is glazing, not installation
         F.INSTALLATION,
@@ -1101,7 +1177,10 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                 )
                 key = req.dedupe_key()
                 if rule.field in _ONE_PER_ARTICLE:
-                    slot = (rule.field, f"{chunk.id}:{_slot_word(value)}")
+                    # hardware parts now carry their qualifiers: two gâches in one article
+                    # ("en Zamak", "électrique") are two parts, one per sentence is enough
+                    where = f"{chunk.id}:{sentence}" if rule.field == F.HARDWARE else chunk.id
+                    slot = (rule.field, f"{where}:{_slot_word(value)}")
                     previous = per_slot.get(slot)
                     if previous is not None and previous in found:
                         # Keep the most informative value for this sentence.
