@@ -140,7 +140,7 @@ def test_glazing_hardware_and_opening_wordings() -> None:
     reqs = _extract(
         "Vitrage sablé en salle de bains, double vitrage avec remplissage argon.\n\n"
         "Vitrage feuilleté STADIP PROTECT 44.2 pour les allèges, vitrage anti-effraction au RDC.\n\n"
-        "Ferrage par fiches bichromatées, tringlerie dissimulée, ferme-porte et ventouses.\n\n"
+        "Ferrage par fiches bichromatées, tringlerie dissimulée, ferme-porte hydraulique et ventouses 300 daN.\n\n"
         "Ouverture oscillo-battante pour les cuisines, portes battantes motorisées en hall."
     )
     assert {"sablé", "argon"} <= {v.split()[-1] for v in _values(reqs, F.GLAZING_TYPE)}
@@ -684,3 +684,38 @@ def test_profile_makers_glazing_bars_and_traditional_profiles() -> None:
         "mouton et gueule de loup",
     ):
         assert want in profiles, (want, profiles)
+
+
+def test_no_hardware_or_shutter_values_from_general_or_framing_sentences() -> None:
+    general = _extract(
+        "Les ferrures utilisées seront de bonne qualité.\n\n"
+        "Chaque serrure livrée avec 3 clés.\n\n"
+        "Le contrôle, le réglage et la remise en état des paumelles et serrures.\n\n"
+        "Serrure à plus de 30 cm d'un angle rentrant.\n\n"
+        "Fourniture du cylindre des portes provisoires."
+    )
+    assert not _values(general, F.HARDWARE)
+    lock_case = _extract("Crémone encastrée avec coffre de serrure et cylindre simple entrée.")
+    assert not any("coffre" in v.lower() for v in _values(lock_case, F.SHUTTERS))
+    framing = _extract("Le rajout de volets roulants extérieurs.", heading="1 Objet du marché")
+    assert not _values(framing, F.SHUTTERS)
+    contents = _extract("3.6 Volets bois extérieurs ........................ 36")
+    assert not _values(contents, F.SHUTTERS)
+
+
+def test_part_descriptions_keep_counts_and_whole_names() -> None:
+    reqs = _extract(
+        "Ferrage 4 paumelles de 160 mm par vantail.\n\n"
+        "Crémone-serrure à verrouillage automatique, demi-cylindre européen et serrures.\n\n"
+        "Barre anti-panique de type 89 DESIGN de chez JPM."
+    )
+    hardware = _values(reqs, F.HARDWARE)
+    joined = " | ".join(hardware)
+    for want in (
+        "4 paumelles de 160 mm",
+        "demi-cylindre européen",
+        "Barre anti-panique de type 89",
+    ):
+        assert want in joined, (want, joined)
+    assert not any(v.startswith(("serrure à verrouillage", "cylindre")) for v in hardware)
+    assert "serrures" not in hardware  # a bare name beside described parts
