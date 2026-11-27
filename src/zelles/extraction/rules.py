@@ -540,7 +540,7 @@ RULES: list[Rule] = [
     Rule(
         F.HARDWARE,
         re.compile(
-            rf"\b(?:crémone(?:-serrure)?{_HW}{{0,60}}|paumelles?{_HW}{{0,50}}|ferme-?\s?portes?{_HW}{{0,60}}|poignées?{_HW}{{0,50}}|renvois?\s+d'angle{_HW}{{0,30}}|barres?\s+de\s+man(?:œ|oe)uvre{_HW}{{0,30}}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{{0,30}})",
+            rf"(?<![-\w])(?:crémone(?:-serrure)?{_HW}{{0,60}}|(?:\d\s+(?:à\s+\d\s+)?)?paumelles?{_HW}{{0,50}}|ferme-?\s?portes?{_HW}{{0,60}}|poignées?{_HW}{{0,50}}|renvois?\s+d'angle{_HW}{{0,30}}|barres?\s+de\s+man(?:œ|oe)uvre{_HW}{{0,30}}|(?:système\s+|quincaillerie\s+)?(?:Winkhaus|Roto|Siegenia|Ferco|Maco|Sobinco|Hoppe|Assa\s+Abloy|Dormakaba|Vachette)\b[^.;,\n]{{0,30}})",
             _I,
         ),
         0.6,
@@ -548,7 +548,7 @@ RULES: list[Rule] = [
     Rule(  # further hardware named in a fitting list
         F.HARDWARE,
         re.compile(
-            rf"\b(?:tringlerie|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|bandeaux?\s+ventouses?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|contacteurs?\s+à\s+cl[ée]f?s?|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette|rosettes?|cylindres?|butées?|sélecteurs?\s+de\s+vantail|supports?\s+d'angle|ailes?\s+de\s+préhension|ferrures|arrêts?\s+de\s+portes?|verrous?)\b{_HW}{{0,60}}",
+            rf"(?<![-\w])(?:tringlerie|demi-cylindres?|barres?\s+(?:anti-?\s?paniques?|de\s+tirage)|bâtons?\s+de\s+maréchal|serrures?|béquilles?|(?:ferrage\s+(?:par\s+)?|paumelles\s+ou\s+)fiches|fiches\s+(?:bichromat\w+|réglables|laquées)|gâches?(?:\s+de\s+sécurité)?|ferme[- ]portes?|bandeaux?\s+ventouses?|ventouses?|anti-?\s?paniques?|contacteurs?\s+d'ouverture|contacteurs?\s+à\s+cl[ée]f?s?|compas(?:\s+(?:limiteurs?|de\s+sécurité))?|loqueteaux?|limiteurs?\s+d'ouverture|limitateurs?\s+de\s+débattement|houssette|rosettes?|cylindres?|butées?|sélecteurs?\s+de\s+vantail|supports?\s+d'angle|ailes?\s+de\s+préhension|ferrures|arrêts?\s+de\s+portes?|verrous?)\b{_HW}{{0,60}}",
             _I,
         ),
         0.6,
@@ -575,7 +575,7 @@ RULES: list[Rule] = [
     Rule(
         F.SHUTTERS,
         re.compile(
-            r"\bvolets?\s+roulants?[^.;\n]{0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?|à\s+projection|à\s+l'italienne|enrouleurs?|screens?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))(?:(?!\s+(?:pour|avec)\b)[^.;\n]){0,40}",
+            r"\bvolets?\s+roulants?(?:(?![,\s]+(?:seront\s+munis|devr(?:a|ont)|choisis|ne|le\s+cas)\b)[^.;\n]){0,90}|\bstores?\s+(?:intérieurs?|extérieurs?|occultants?|vénitiens?|bannes?|à\s+projection|à\s+l'italienne|enrouleurs?|screens?)[^.;,\n]{0,40}|\bmanivelle\b|\bpersiennes?\b[^.;\n]{0,80}|\bvolets?\s+battants?[^.;\n]{0,60}|\bBSO\b|\bbrise-soleil[^.;,\n]{0,40}|\bcoffre\s+(?![-–]|afin\b|de\s+serrure|avec\s+cylindre|en\s+tôle)[^.;,\n]{2,40}|\bman(?:œ|oe)uvre\s+(?:manuelle|électrique|motorisée|radio|solaire|par\s+(?:sangle|treuil|manivelle))(?:(?!\s+(?:pour|avec)\b)[^.;\n]){0,40}",
             _I,
         ),
         0.65,
@@ -980,6 +980,26 @@ _REFERENCE_ITEM = re.compile(
 _EXCLUSION_LEAD = re.compile(
     r"\bne\s+(?:font|fait)\s+pas\s+partie\b|\bprestations?\s+exclues?\b|\bsont\s+exclus\b", _I
 )
+# Sentences about parts in general, their upkeep or works outside the joinery: no part spec
+# ("ferrures de bonne qualité", "serrure livrée avec 3 clés", "remise en état des paumelles").
+_NO_PART_SPEC = re.compile(
+    r"bonne\s+qualité|notoirement|livrée?s?\s+avec\s+(?:\d|trois|deux)\s+cl|remise\s+en\s+état|"
+    r"\bcontrôle,|voir\s+article|\btels?\s+que\b|\betc\b|provisoires?|clé\s+de\s+chantier|"
+    r"à\s+charge\s+du\s+lot|titulaire\s+du\s+(?:présent\s+)?lot|le\s+cas\s+échéant|quelconque\s+oubli|"
+    r"sont\s+décrits|raccordements?\s+électriques|\bminium\b|dimensionn|\bnoeuds?\b|\bassemblages?\b|"
+    r"portail|clôtures?|boîtes?\s+aux\s+lettres|angle\s+rentrant|<\s*50\s*N\b|"
+    r"(?:située?s?|comprise)\s+entre\s+0",
+    _I,
+)
+# Articles that frame the works rather than describe a product.
+_NO_SPEC_HEADING = re.compile(
+    r"objet\s+du\s+marché|limites?\s+de\s+prestations|installation\s+de\s+chantier|\blégende\b|"
+    r"reconnaissance|\bétudes\b|vérification|structure\s+bois|pièces\s+métalliques|portes?\s+provisoires?",
+    _I,
+)
+# A table-of-contents line: "3.6 Volets bois extérieurs ........ 36".
+_CONTENTS_LINE = re.compile(r"\.{5,}|…{3,}")
+_PART_FIELDS = frozenset({F.HARDWARE, F.SHUTTERS})
 # The handle's position is an accessibility rule, not a hardware spec.
 _HANDLE_POSITION = re.compile(r"\bpositionn[ée]|\bréglementation|\bconformément", _I)
 
@@ -1073,6 +1093,15 @@ def _keep(
     if rule.before_excludes is not None and rule.before_excludes.search(before):
         return False
     if rule.before_requires is not None and not rule.before_requires.search(before):
+        return False
+    if rule.field in _PART_FIELDS and (
+        _NO_PART_SPEC.search(sentence) or _NO_SPEC_HEADING.search(headings.rsplit(" > ", 1)[-1])
+    ):
+        return False
+    line_start = body.rfind("\n", 0, match.start()) + 1
+    line_end = body.find("\n", match.start())
+    line = body[line_start : line_end if line_end >= 0 else len(body)]
+    if rule.field in _DESCRIPTIVE and _CONTENTS_LINE.search(line):
         return False
     if rule.field in _DESCRIPTIVE and (
         _REFERENCE_ITEM.search(sentence)
@@ -1184,7 +1213,30 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
                     if key not in found:
                         per_slot[slot] = key
                 found.setdefault(key, req)
-    return _drop_repeated_standards(list(found.values()))
+    return _drop_repeated_standards(_drop_bare_parts(list(found.values())))
+
+
+def _drop_bare_parts(reqs: list[Requirement]) -> list[Requirement]:
+    """Drop a bare hardware name ("serrures") from an article that describes its parts.
+
+    An article that specifies "serrure à larder 3 points" names other parts in
+    passing ("gâches", "poignée"); the bare word adds no requirement there.
+    """
+    described = {
+        r.citation.chunk_id
+        for r in reqs
+        if r.field == F.HARDWARE and r.citation is not None and len(r.value.split()) > 1
+    }
+    return [
+        r
+        for r in reqs
+        if not (
+            r.field == F.HARDWARE
+            and r.citation is not None
+            and len(r.value.split()) == 1
+            and r.citation.chunk_id in described
+        )
+    ]
 
 
 def _drop_repeated_standards(reqs: list[Requirement]) -> list[Requirement]:
