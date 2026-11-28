@@ -707,14 +707,14 @@ def test_part_descriptions_keep_counts_and_whole_names() -> None:
     reqs = _extract(
         "Ferrage 4 paumelles de 160 mm par vantail.\n\n"
         "Crémone-serrure à verrouillage automatique, demi-cylindre européen et serrures.\n\n"
-        "Barre anti-panique de type 89 DESIGN de chez JPM."
+        "Barre anti-panique de type 42 CLASSIC de chez Dupont."
     )
     hardware = _values(reqs, F.HARDWARE)
     joined = " | ".join(hardware)
     for want in (
         "4 paumelles de 160 mm",
         "demi-cylindre européen",
-        "Barre anti-panique de type 89",
+        "Barre anti-panique de type 42",
     ):
         assert want in joined, (want, joined)
     assert not any(v.startswith(("serrure à verrouillage", "cylindre")) for v in hardware)
