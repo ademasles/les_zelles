@@ -295,3 +295,32 @@ def test_each_kind_of_item_inherits_only_what_describes_it() -> None:
     assert inherited(shutter, F.SHUTTERS) != []
     # a shutter takes colours and its own clauses, not the windows' acoustics or Uw
     assert set(shutter.values) == {F.COLOR, F.SHUTTERS}
+
+
+@pytest.mark.parametrize(
+    ("value", "window", "door"),
+    [
+        ("crémones à 2 points", True, False),
+        ("crémone pompier à 2 points", False, True),
+        ("crémone 2 points type pompier", False, True),
+        ("crémone à mortaiser", False, True),
+        ("Ferme porte coupe-feu", False, True),
+        ("paumelles inox", True, True),
+    ],
+)
+def test_hardware_goes_to_the_kind_it_belongs_to(value: str, window: bool, door: bool) -> None:
+    from zelles.domain.items import _fits
+    from zelles.domain.spec import Requirement
+
+    req = Requirement(field=F.HARDWARE, value=value)
+    assert _fits(ItemKind.WINDOW, req, shutters_apart=False, ud_stated=False) is window
+    assert _fits(ItemKind.DOOR, req, shutters_apart=False, ud_stated=False) is door
+
+
+def test_a_chapter_fire_class_binds_its_doors_only() -> None:
+    from zelles.domain.items import _fits
+    from zelles.domain.spec import Requirement
+
+    req = Requirement(field=F.FIRE_RATING, value="EI 60")
+    assert _fits(ItemKind.DOOR, req, shutters_apart=False, ud_stated=False)
+    assert not _fits(ItemKind.WINDOW, req, shutters_apart=False, ud_stated=False)

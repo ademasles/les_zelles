@@ -114,15 +114,13 @@ _SHUTTER_INHERITS = frozenset({F.SHUTTERS, F.COLOR, F.FINISH, F.INSTALLATION})
 # Hardware that only a door has, and hardware that only a window has: a chapter clause
 # listing both binds each item with its own kind of parts.
 _DOOR_PARTS = re.compile(
-    r"ferme-?portes?|anti-?panique|cr[ée]mones?\s+pompiers?|tirage|b[âa]ton\s+de\s+mar[ée]chal|"
-    r"butoirs?|g[âa]ches?\s+[ée]lectriques?|ventouses?|cylindres?|serrures?|b[ée]quilles?|"
-    r"pivots?|s[ée]lecteurs?",
+    r"ferme[\s-]?portes?|anti[\s-]?panique|cr[ée]mones?\b[^.;]{0,40}?\b(?:pompiers?|[àa]\s+mortaiser)|"
+    r"tirage|b[âa]ton\s+de\s+mar[ée]chal|butoirs?|g[âa]ches?\s+[ée]lectriques?|ventouses?|"
+    r"cylindres?|serrures?|b[ée]quilles?|pivots?|s[ée]lecteurs?",
     _I,
 )
 _WINDOW_PARTS = re.compile(
-    r"oscillo|cr[ée]mones?(?!\s+pompiers?)|poign[ée]es?\s+de\s+fen[êe]tres?|"
-    r"limiteurs?\s+d'ouverture",
-    _I,
+    r"oscillo|cr[ée]mones?|poign[ée]es?\s+de\s+fen[êe]tres?|limiteurs?\s+d'ouverture", _I
 )
 _UD = re.compile(r"\bUd\b")
 _UW = re.compile(r"\bUw\b", _I)
@@ -373,8 +371,13 @@ def _fits(kind: ItemKind, req: Requirement, *, shutters_apart: bool, ud_stated: 
     if req.field == F.SHUTTERS:
         return not shutters_apart  # the tender describes its shutters as items of their own
     if req.field == F.HARDWARE:
-        parts = _WINDOW_PARTS if kind is ItemKind.DOOR else _DOOR_PARTS
-        return not parts.search(req.value)
+        door_part = bool(_DOOR_PARTS.search(req.value))
+        if kind is ItemKind.DOOR:
+            return door_part or not _WINDOW_PARTS.search(req.value)
+        return not door_part
+    if req.field == F.FIRE_RATING:
+        return kind is ItemKind.DOOR  # a chapter's fire classes are its doors' and walls'
+
     if req.field == F.UW:
         if kind is ItemKind.DOOR:  # a Uw binds doors only when the tender gives no Ud
             return not (ud_stated and _UW.search(req.value))
