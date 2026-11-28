@@ -23,6 +23,33 @@ _NUMBERED = re.compile(
     r"([A-Za-zÀ-ÿ\"'(].{1,140})$",
     re.IGNORECASE,
 )
+# An item heading that runs on into its size: "3.4.2.1. Châssis repère A de 1800 x 1350 mm
+# environ…". The title ends where the size starts; the rest is the item's text.
+_SIZE_CLAUSE = re.compile(r"\s+(?:de|d')\s*(?=[(\d])")
+# Labels written in capitals inside an article: not headings.
+_LABELS = re.compile(
+    r"^(?:localisations?|nota(?:\s+bene)?|n\.?\s?b|remarques?|observations?|important|"
+    r"attention|rappels?)\W*$",
+    re.IGNORECASE,
+)
+# Title-block and address lines that survive page-furniture removal: "12 Rue des
+# Lilas - 12345 BOURGVILLE", "54321 VALMONT", "10000001-A1-01-PLN_V1 BAT A 01/01/2026",
+# "800x1200 // TEINTE". They are no headings, and must not stay open in the outline.
+_STREET = re.compile(
+    r"^(?:rue|avenue|av\.|boulevard|bd|chemin|all[ée]e|impasse|place|route|quai|square|"
+    r"cours|lieu-dit|z\.?[ai]\.?|zac|b\.?p\.?|c\.?s\.?)\b",
+    re.IGNORECASE,
+)
+_POSTCODE = re.compile(
+    r"(?<!EN )(?<!ISO )(?<!NF )\b\d{2}\s?\d{3}\s+(?:[A-ZÀ-Ÿ]{2}\s+)?[A-ZÀ-Ÿ][A-ZÀ-Ÿ'-]{2,}"
+)
+# A revision line on a title block: "2 MARS 2025 Mise à jour suite avis".
+_DATED = re.compile(
+    r"^(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|"
+    r"d[ée]cembre)\s+\d{4}\b",
+    re.IGNORECASE,
+)
+_REFERENCE_CODE = re.compile(r"\d{6,}|\b\d{1,2}/\d{1,2}/\d{2,4}\b|\b\d{2,4}\s?[x×]\s?\d{2,4}\b")
 _LETTERED = re.compile(r"^\s*([A-H]|[IVX]{1,4})[.)]\s+([A-ZÀ-Ÿ].{2,100})$")
 _UNIT_AFTER_NUMBER = re.compile(
     r"^\s*\d+(?:[.,]\d+)?\s*(?:mm|cm|m|dB|W|%|kg|°|x|×)\b", re.IGNORECASE
@@ -35,6 +62,7 @@ class Heading:
     number: str | None
     title: str
     is_lot: bool = False
+    rest: str = ""  # text on the heading's line after the title, when the line runs on
 
     @property
     def label(self) -> str:
@@ -56,9 +84,13 @@ def detect_heading(line: str, *, style_level: int | None = None) -> Heading | No
     ``style_level`` is a hint from the source format (DOCX heading styles).
     """
     text = line.strip()
-    if not text or len(text) > 160 or _LEADERS.search(text):
-        return None  # empty, a paragraph, or a table-of-contents entry
+    if not text or _LEADERS.search(text):
+        return None  # empty or a table-of-contents entry
+    if len(text) > 160:
+        return _run_on_item(text, style_level)  # a paragraph, unless an item heading runs on
 
+    if _POSTCODE.search(text):
+        return None  # an address on a title block
     if m := _LOT.match(text):
         number = m.group(1).upper()
         title = m.group(2).strip(" -:.")
@@ -71,16 +103,17 @@ def detect_heading(line: str, *, style_level: int | None = None) -> Heading | No
 
     if m := _NUMBERED.match(text):
         number, title = m.group(1), m.group(2).strip()
+        if _STREET.match(title) or _DATED.match(title):
+            return None  # "12 Rue des Lilas", "3 Avenue des Tilleuls", "2 MARS 2025 Mise à jour"
         first = int(number.split(".")[0])
         sentence_like = title.endswith((".", ";", ",")) and len(title) > 80
         # Real titles start with a capital: "5 étapes de traitement..." is a sentence.
-        if (
-            first <= 40
-            and not sentence_like
-            and not title[0].islower()
-            and not _QUANTITY.search(title)
-        ):
-            return Heading(level=number.count(".") + 1, number=number, title=title.rstrip(" :."))
+        if first <= 40 and not sentence_like and not title[0].islower():
+            if not _QUANTITY.search(title):
+                level = number.count(".") + 1
+                return Heading(level=level, number=number, title=title.rstrip(" :."))
+            if (run_on := _run_on_item(text, style_level)) is not None:
+                return run_on
 
     if m := _LETTERED.match(text):
         return Heading(level=1, number=m.group(1), title=m.group(2).rstrip(" :."))
@@ -88,7 +121,39 @@ def detect_heading(line: str, *, style_level: int | None = None) -> Heading | No
     if style_level is not None:
         return Heading(level=style_level, number=None, title=text.rstrip(" :."))
 
-    if _is_mostly_upper(text) and len(text) <= 90 and not text.endswith((".", ";", ",")):
+    if (
+        _is_mostly_upper(text)
+        and len(text) <= 90
+        and text[:1] not in '-•*"«“'  # a list line of capitals: '- "ACCUEIL"'
+        and not text.endswith((".", ";", ","))
+        and not _LABELS.match(text)
+        and not _REFERENCE_CODE.search(text)  # a plan reference, a date or a size
+    ):
         return Heading(level=1, number=None, title=text.rstrip(" :."))
 
     return None
+
+
+_DEEP_NUMBERED = re.compile(r"^\s*(\d{1,2}(?:\.\d{1,3}){2,5})\.?\s*[-:)]?\s+([A-ZÀ-Ÿ].*)$")
+
+
+def _run_on_item(text: str, style_level: int | None) -> Heading | None:
+    """A deep item heading that runs on into its size, however long the line.
+
+    "3.4.2.1. Châssis repère A de 1800 x 1350 mm environ, comprenant …" is the
+    heading "3.4.2.1 Châssis repère A" followed by the item's text. Only deep
+    articles qualify: "3 PC 16 A avec terre" stays a list item.
+    """
+    m = _DEEP_NUMBERED.match(text)
+    if m is None or style_level is not None:
+        return None
+    number, title = m.group(1), m.group(2)
+    cut = _SIZE_CLAUSE.search(title)
+    if cut is None or int(number.split(".")[0]) > 40:
+        return None
+    head = title[: cut.start()]
+    if len(head.split()) < 2 or len(head) > 140:
+        return None
+    return Heading(
+        level=number.count(".") + 1, number=number, title=head, rest=title[cut.start() :].strip()
+    )

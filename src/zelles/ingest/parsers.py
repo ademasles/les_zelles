@@ -17,6 +17,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
@@ -27,7 +28,7 @@ from typing import Any, Protocol
 from zelles.domain.documents import BBox, Block, BlockKind, Page, ParsedDocument
 from zelles.ingest.cleaning import clean_text
 from zelles.ingest.furniture import strip_furniture
-from zelles.ingest.outline import detect_heading
+from zelles.ingest.outline import Heading, detect_heading
 
 log = logging.getLogger(__name__)
 
@@ -64,58 +65,129 @@ class Parser(Protocol):
 
 
 # --------------------------------------------------------------------------- helpers
-def _blocks_from_lines(lines: Iterable[tuple[str, BBox | None]], page: int | None) -> list[Block]:
-    """Group lines into headings and paragraphs, keeping boxes for highlighting."""
-    blocks: list[Block] = []
-    buffer: list[str] = []
-    box: BBox | None = None
-    last_bottom: float | None = None
-    last_height: float | None = None
+# A line that holds only an article number: "02.3.4", printed apart from its title.
+_LONE_NUMBER = re.compile(r"^\d{1,2}(?:\.\d{1,3}){1,5}\.?$")
 
-    def flush() -> None:
-        nonlocal buffer, box
-        if buffer:
-            text = clean_text(" ".join(buffer))
+
+def _same_row(a: BBox | None, b: BBox | None) -> bool:
+    return a is not None and b is not None and abs(a.y0 - b.y0) < 2.0
+
+
+class _LineGrouper:
+    """Group a page's lines into headings and paragraphs, keeping boxes for highlighting."""
+
+    def __init__(self, page: int | None) -> None:
+        self.page = page
+        self.blocks: list[Block] = []
+        self.buffer: list[str] = []
+        self.boxes: list[BBox | None] = []
+        self.last_bottom: float | None = None
+        self.last_height: float | None = None
+        self.pending: tuple[str, BBox | None] | None = None  # a lone number awaiting its title
+
+    def flush(self) -> None:
+        if self.buffer:
+            text = clean_text(" ".join(self.buffer))
             if text:
                 kind = BlockKind.LIST_ITEM if text[:1] in "-*" else BlockKind.PARAGRAPH
-                blocks.append(Block(kind=kind, text=text, page=page, bbox=box))
-        buffer, box = [], None
+                self.blocks.append(
+                    Block(kind=kind, text=text, page=self.page, bbox=_union(self.boxes))
+                )
+        self.buffer, self.boxes = [], []
 
-    for raw, line_box in lines:
+    def heading(self, heading: Heading, box: BBox | None) -> None:
+        self.flush()
+        self.blocks.append(
+            Block(
+                kind=BlockKind.HEADING,
+                text=heading.label,
+                page=self.page,
+                bbox=box,
+                heading_level=heading.level,
+            )
+        )
+        self.last_bottom = box.y1 if box else None
+        if heading.rest:
+            self.buffer.append(heading.rest)
+            self.boxes.append(box)
+
+    def lone_number(self, line: str, box: BBox | None) -> None:
+        """An article number printed apart from its title, before or after it on the row."""
+        start = next((k for k in range(len(self.buffer)) if _same_row(self.boxes[k], box)), None)
+        if start is not None:
+            found = detect_heading(f"{line.rstrip('.')} {' '.join(self.buffer[start:])}")
+            if found is not None:
+                del self.buffer[start:], self.boxes[start:]
+                self.heading(found, box)
+                return
+        self.pending = (line, box)
+
+    def take_pending(self, line: str, box: BBox | None) -> bool:
+        """Join a pending number to this line when they form a heading on one row."""
+        if self.pending is None:
+            return False
+        number, number_box = self.pending
+        self.pending = None
+        found = detect_heading(f"{number.rstrip('.')} {line}")
+        if found is not None and (number_box is None or _same_row(number_box, box)):
+            self.heading(found, box)
+            return True
+        self.buffer.append(number)
+        self.boxes.append(number_box)
+        return False
+
+    def add(self, raw: str, box: BBox | None) -> None:
         line = clean_text(raw)
         if not line:
-            flush()
-            last_bottom = None
-            continue
+            self.flush()
+            self.last_bottom = None
+            return
+        if _LONE_NUMBER.match(line):
+            self.lone_number(line, box)
+            return
+        if self.take_pending(line, box):
+            return
         heading = detect_heading(line)
         if heading is not None:
-            flush()
-            blocks.append(
-                Block(
-                    kind=BlockKind.HEADING,
-                    text=heading.label,
-                    page=page,
-                    bbox=line_box,
-                    heading_level=heading.level,
-                )
-            )
-            last_bottom = line_box.y1 if line_box else None
-            continue
+            self.heading(heading, box)
+            return
         starts_item = line[:1] in "-*" or line[:2] in ("o ", "> ")
         big_gap = (
-            line_box is not None
-            and last_bottom is not None
-            and last_height is not None
-            and line_box.y0 - last_bottom > 0.8 * last_height
+            box is not None
+            and self.last_bottom is not None
+            and self.last_height is not None
+            and box.y0 - self.last_bottom > 0.8 * self.last_height
         )
         if starts_item or big_gap:
-            flush()
-        buffer.append(line)
-        if line_box is not None:
-            box = line_box if box is None else box.union(line_box)
-            last_bottom, last_height = line_box.y1, line_box.y1 - line_box.y0
-    flush()
-    return blocks
+            self.flush()
+        self.buffer.append(line)
+        self.boxes.append(box)
+        if box is not None:
+            self.last_bottom, self.last_height = box.y1, box.y1 - box.y0
+
+    def finish(self) -> list[Block]:
+        if self.pending is not None:
+            self.buffer.append(self.pending[0])
+            self.boxes.append(self.pending[1])
+            self.pending = None
+        self.flush()
+        return self.blocks
+
+
+def _blocks_from_lines(lines: Iterable[tuple[str, BBox | None]], page: int | None) -> list[Block]:
+    """Group lines into headings and paragraphs, keeping boxes for highlighting."""
+    grouper = _LineGrouper(page)
+    for raw, box in lines:
+        grouper.add(raw, box)
+    return grouper.finish()
+
+
+def _union(boxes: list[BBox | None]) -> BBox | None:
+    box: BBox | None = None
+    for b in boxes:
+        if b is not None:
+            box = b if box is None else box.union(b)
+    return box
 
 
 def _tesseract_available() -> bool:

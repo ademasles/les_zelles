@@ -62,9 +62,18 @@ def chunk_document(doc: ParsedDocument, *, max_chars: int = 2400) -> list[Chunk]
         if block.kind == BlockKind.HEADING:
             emit()
             heading = detect_heading(block.text, style_level=block.heading_level)
-            level = block.heading_level if block.heading_level is not None else 1
+            # levels are doubled so an unnumbered heading can sit between two numbered ones
+            level = 2 * (block.heading_level if block.heading_level is not None else 1)
             if heading is not None and heading.is_lot:
                 lot, level, stack = heading.label, 0, []
+            elif heading is not None and heading.number is None:
+                # "STORES" after "4.3 Protections solaires" belongs to that article and
+                # closes with it: the next "4.4" does not nest under it.
+                article_level = next(
+                    (lv for lv, label in reversed(stack) if label[:1].isdigit()), None
+                )
+                if article_level is not None:
+                    level = article_level + 1
             while stack and stack[-1][0] >= level:
                 stack.pop()
             stack.append((level, block.text))
