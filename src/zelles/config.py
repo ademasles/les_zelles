@@ -81,6 +81,13 @@ class Settings(BaseSettings):
         default=True,
         description="In a CCTP covering every trade, extract from the joinery lots only.",
     )
+    recap_template: Path | None = Field(
+        default=None,
+        description=(
+            "TOML file, or folder of them, with the company's recap forms; "
+            "one row per catalogue field when unset."
+        ),
+    )
 
     # ---------------------------------------------------------------- ingestion
     parser: Literal["auto", "pdfium", "docling"] = "auto"

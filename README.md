@@ -92,6 +92,10 @@ uv sync --extra ocr
 # 1. Rules only: free, offline, deterministic
 uv run zelles analyze path/to/cctp.pdf -o sheet.xlsx
 
+# Draft the technical recap: one column per joinery item, each value with its page.
+# ZELLES_RECAP_TEMPLATE points at your own form(s); see docs/recap-template.example.toml
+uv run zelles analyze path/to/cctp.pdf --recap recap.xlsx
+
 # 2. With a local model (https://ollama.com)
 ollama pull qwen3:8b && ollama pull bge-m3
 uv run zelles analyze path/to/cctp.pdf -m ollama:qwen3:8b -e ollama:bge-m3 --save

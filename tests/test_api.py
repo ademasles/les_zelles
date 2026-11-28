@@ -55,6 +55,10 @@ def test_full_flow(client: TestClient, sample_bytes: bytes, sample_pdf: bytes) -
     assert png.status_code == 200 and png.content.startswith(b"\x89PNG")
 
     xlsx = client.get(f"/api/v1/documents/{doc_id}/export.xlsx")
+    recap = client.get(f"/api/v1/documents/{doc_id}/recap.xlsx")
+    assert recap.status_code == 200
+    assert recap.content[:2] == b"PK"
+    assert "_recap.xlsx" in recap.headers["content-disposition"]
     assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
     assert "field,label" in client.get(f"/api/v1/documents/{doc_id}/export.csv").text.replace(
         "category,", ""

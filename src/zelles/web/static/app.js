@@ -62,6 +62,7 @@ async function openDoc(id) {
   $("doc-title").textContent = s.title || s.filename;
   $("doc-meta").textContent = [s.title ? s.filename : null, s.lots.join(" · ") || "No lot detected", `analysed with ${s.model}`].filter(Boolean).join(" · ");
   for (const fmt of ["xlsx", "csv", "json"]) $(`x-${fmt}`).href = withKey(`${API}/documents/${id}/export.${fmt}`);
+  $("x-recap").href = withKey(`${API}/documents/${id}/recap.xlsx`);
   const verified = s.requirements.filter((r) => r.status === "verified").length;
   const cost = s.usage.cost_usd == null ? "n/a" : `$${s.usage.cost_usd.toFixed(4)}`;
   $("stats").innerHTML = [
