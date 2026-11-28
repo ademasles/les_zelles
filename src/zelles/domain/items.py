@@ -399,8 +399,10 @@ def _fits(
     """Whether a general clause can describe an item of this kind."""
     if kind is ItemKind.SHUTTER:
         return req.field in _SHUTTER_INHERITS
-    if solid and req.field in _GLAZING:
-        return False
+    if solid and (
+        req.field in _GLAZING or (req.field == F.ACCESSIBILITY and _GLAZED.search(req.value))
+    ):
+        return False  # no glass: no glazing, no marking of glazed leaves
     if req.field == F.SHUTTERS:
         return not shutters_apart  # the tender describes its shutters as items of their own
     if req.field == F.HARDWARE:

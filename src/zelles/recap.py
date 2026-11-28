@@ -197,10 +197,17 @@ def _column(
     template: RecapTemplate,
     kind: ItemKind | None = None,
 ) -> RecapColumn:
+    shown: set[SpecField] = set()
+
     def cell(row: RecapRow) -> list[RecapValue]:
         if kind is not None and row.kinds and kind not in row.kinds:
             return []  # a door's hardware goes on the door rows, not the window rows
-        return _distinct([v for f in row.fields for v in values.get(f, [])])
+        if kind is None:  # the general clauses state a field once, on its first row
+            fields = [f for f in row.fields if f not in shown]
+            shown.update(row.fields)
+        else:
+            fields = list(row.fields)
+        return _distinct([v for f in fields for v in values.get(f, [])])
 
     return RecapColumn(title=title, cells=[cell(row) for row in template.rows()])
 

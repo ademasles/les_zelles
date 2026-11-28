@@ -357,5 +357,11 @@ def test_a_solid_door_takes_no_glazing_clause() -> None:
     )
     solid, glazed = build_items(sheet, chunks).items
     assert solid.solid and not glazed.solid
+    from zelles.domain.items import _fits
+    from zelles.domain.spec import Requirement
+
+    marking = Requirement(field=F.ACCESSIBILITY, value="repérage visuel des portes vitrées")
+    assert not _fits(ItemKind.DOOR, marking, shutters_apart=False, ud_stated=False, solid=True)
+    assert _fits(ItemKind.DOOR, marking, shutters_apart=False, ud_stated=False)
     assert F.GLAZING_COMPOSITION not in solid.values and F.COLOR in solid.values
     assert F.GLAZING_COMPOSITION in glazed.values

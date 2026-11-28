@@ -179,3 +179,24 @@ def test_a_row_for_one_kind_of_item_is_filled_by_that_kind_only() -> None:
     recap = draft_recap(book, filename=name, template=template)
     assert _cell(recap, 2, "Door hardware") == ["serrure 3 points"]
     assert _cell(recap, 2, "Window hardware") == []
+
+
+def test_the_general_clauses_state_a_field_once_on_its_first_row() -> None:
+    from zelles.domain.items import ItemBook, ItemKind
+    from zelles.domain.spec import Requirement
+
+    book = ItemBook(general={F.HARDWARE: [Requirement(field=F.HARDWARE, value="paumelles inox")]})
+    template = RecapTemplate(
+        name="kinds",
+        sections=(
+            RecapSection(
+                title="Hardware",
+                rows=(
+                    RecapRow(label="Window", fields=(F.HARDWARE,), kinds=(ItemKind.WINDOW,)),
+                    RecapRow(label="Door", fields=(F.HARDWARE,), kinds=(ItemKind.DOOR,)),
+                ),
+            ),
+        ),
+    )
+    recap = draft_recap(book, filename="x", template=template)
+    assert [len(cell) for cell in recap.columns[0].cells] == [1, 0]
