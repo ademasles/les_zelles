@@ -40,7 +40,15 @@ _STREET = re.compile(
     r"cours|lieu-dit|z\.?[ai]\.?|zac|b\.?p\.?|c\.?s\.?)\b",
     re.IGNORECASE,
 )
-_POSTCODE = re.compile(r"(?<!EN )(?<!ISO )(?<!NF )\b\d{2}\s?\d{3}\s+[A-ZÀ-Ÿ][A-ZÀ-Ÿ'-]{2,}")
+_POSTCODE = re.compile(
+    r"(?<!EN )(?<!ISO )(?<!NF )\b\d{2}\s?\d{3}\s+(?:[A-ZÀ-Ÿ]{2}\s+)?[A-ZÀ-Ÿ][A-ZÀ-Ÿ'-]{2,}"
+)
+# A revision line on a title block: "2 MARS 2025 Mise à jour suite avis".
+_DATED = re.compile(
+    r"^(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|"
+    r"d[ée]cembre)\s+\d{4}\b",
+    re.IGNORECASE,
+)
 _REFERENCE_CODE = re.compile(r"\d{6,}|\b\d{1,2}/\d{1,2}/\d{2,4}\b|\b\d{2,4}\s?[x×]\s?\d{2,4}\b")
 _LETTERED = re.compile(r"^\s*([A-H]|[IVX]{1,4})[.)]\s+([A-ZÀ-Ÿ].{2,100})$")
 _UNIT_AFTER_NUMBER = re.compile(
@@ -95,8 +103,8 @@ def detect_heading(line: str, *, style_level: int | None = None) -> Heading | No
 
     if m := _NUMBERED.match(text):
         number, title = m.group(1), m.group(2).strip()
-        if _STREET.match(title):
-            return None  # "12 Rue des Lilas", "3 Avenue des Tilleuls"
+        if _STREET.match(title) or _DATED.match(title):
+            return None  # "12 Rue des Lilas", "3 Avenue des Tilleuls", "2 MARS 2025 Mise à jour"
         first = int(number.split(".")[0])
         sentence_like = title.endswith((".", ";", ",")) and len(title) > 80
         # Real titles start with a capital: "5 étapes de traitement..." is a sentence.
