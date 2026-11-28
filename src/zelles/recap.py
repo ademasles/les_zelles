@@ -28,6 +28,9 @@ _ILLEGAL_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]")
 class RecapRow(BaseModel, frozen=True):
     label: str
     fields: tuple[SpecField, ...] = ()
+    kinds: tuple[ItemKind, ...] = Field(
+        default=(), description="Only items of these kinds fill the row ('door' hardware)."
+    )
 
 
 class RecapSection(BaseModel, frozen=True):
@@ -189,14 +192,17 @@ def _item_values(item: JoineryItem) -> dict[SpecField, list[RecapValue]]:
 
 
 def _column(
-    title: str, values: dict[SpecField, list[RecapValue]], template: RecapTemplate
+    title: str,
+    values: dict[SpecField, list[RecapValue]],
+    template: RecapTemplate,
+    kind: ItemKind | None = None,
 ) -> RecapColumn:
-    return RecapColumn(
-        title=title,
-        cells=[
-            _distinct([v for f in row.fields for v in values.get(f, [])]) for row in template.rows()
-        ],
-    )
+    def cell(row: RecapRow) -> list[RecapValue]:
+        if kind is not None and row.kinds and kind not in row.kinds:
+            return []  # a door's hardware goes on the door rows, not the window rows
+        return _distinct([v for f in row.fields for v in values.get(f, [])])
+
+    return RecapColumn(title=title, cells=[cell(row) for row in template.rows()])
 
 
 OTHER_VALUES = "Other values (no row of this form takes them)"
@@ -225,7 +231,7 @@ def draft_recap(
         )
     columns = [_column("General clauses", general, template)]
     for item, values in zip(book.items, item_values, strict=True):
-        column = _column(item.name, values, template)
+        column = _column(item.name, values, template, item.kind)
         column.group, column.codes, column.kind = item.group, item.codes, item.kind
         columns.append(column)
     return Recap(
