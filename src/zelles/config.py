@@ -54,6 +54,13 @@ class Settings(BaseSettings):
         default=2, description="Parallel LLM calls. Use 1 for a single local GPU."
     )
     llm_max_output_tokens: int = 4096
+    llm_reader: Literal["groups", "articles"] = Field(
+        default="groups",
+        description="How the LLM reads: 'groups' asks a chat model for each field group over "
+        "retrieved passages; 'articles' has an extraction model (NuExtract) copy the "
+        "free-text fields from each article, keeping the rules' values it does not "
+        "restate.",
+    )
     ollama_num_ctx: int = Field(
         default=6144,
         description="Context window requested from Ollama. Its own default is often 4096, "

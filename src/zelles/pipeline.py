@@ -28,6 +28,7 @@ from zelles.extraction.merge import merge_requirements
 from zelles.extraction.prompts import SUMMARY_SYSTEM
 from zelles.extraction.rules import extract_with_rules
 from zelles.extraction.scope import focus_on_joinery
+from zelles.extraction.span_reader import SpanReader, combine_with_rules
 from zelles.extraction.verify import verify_requirement
 from zelles.graph.knowledge import KnowledgeGraph, build_graph
 from zelles.ingest.chunking import chunk_document
@@ -111,7 +112,19 @@ async def analyze(
             f"common to all lots; {focus.dropped} passages of other lots were skipped."
         )
     llm_reqs: list[Requirement] = []
-    if llm is not None:
+    if llm is not None and settings.llm_reader == "articles":
+        await progress("llm", 0.5, f"Reading each article with {llm.name}")
+        t = time.perf_counter()
+        rule_reqs = await _read_articles(
+            llm,
+            focus.chunks if focus else chunks,
+            rule_reqs,
+            settings=settings,
+            usage=usage,
+            warnings=warnings,
+        )
+        timings["llm"] = time.perf_counter() - t
+    elif llm is not None:
         await progress("llm", 0.5, f"Reading the specification with {llm.name}")
         t = time.perf_counter()
         extractor = LLMExtractor(
@@ -140,7 +153,7 @@ async def analyze(
         warnings=warnings,
     )
 
-    if llm is not None and summarize and requirements:
+    if llm is not None and summarize and requirements and settings.llm_reader == "groups":
         await progress("summary", 0.92, "Writing the estimator brief")
         sheet.summary = await _summarize(llm, sheet, usage)
 
@@ -149,6 +162,23 @@ async def analyze(
     sheet.usage.seconds = timings["total"]
     await progress("done", 1.0, f"{len(requirements)} requirements extracted")
     return Analysis(doc_id, document, chunks, index, sheet, graph, rendition, timings)
+
+
+async def _read_articles(
+    llm: LLM,
+    chunks: list[Chunk],
+    rule_reqs: list[Requirement],
+    *,
+    settings: Settings,
+    usage: Usage,
+    warnings: list[str],
+) -> list[Requirement]:
+    """The reader's spans for the free-text fields, plus the rule values they miss."""
+    read = await SpanReader(llm, concurrency=settings.llm_concurrency).read(chunks)
+    usage.add(read.usage)
+    if read.errors:
+        warnings.append(f"{len(read.errors)} of {read.articles_read} articles failed to read.")
+    return combine_with_rules(rule_reqs, read.requirements)
 
 
 async def _summarize(llm: LLM, sheet: SpecSheet, usage: Usage) -> str | None:
