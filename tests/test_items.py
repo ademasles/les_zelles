@@ -47,6 +47,7 @@ def test_code_of_a_heading() -> None:
     assert code_of("3.1.4 M7 - dim. 120x215") == "M7"
     assert code_of("Porte PE 3 du hall") == "PE3"
     assert code_of("3.2 Fenêtres PVC") is None
+    assert code_of("5.3 Store intérieur SR04ab de l'accueil") == "SR04ab"
 
 
 def _read(text: str) -> tuple[SpecSheet, list[Chunk]]:
@@ -341,3 +342,26 @@ def test_an_item_class_replaces_its_parent_class() -> None:
     ]
     assert [v.inherited for v in p2.values[F.FIRE_RATING]] == [True]
     assert [v.requirement.value for v in p1.values[F.FRAME_MATERIAL]] == ["Aluminium"]
+
+
+def test_a_solid_door_takes_no_glazing_clause() -> None:
+    sheet, chunks = _read(
+        "# 3 Menuiseries aluminium\n\n"
+        "## 3.1 Généralités\n\n"
+        "Le vitrage sera un double vitrage 4/16/4 à remplissage argon.\n\n"
+        "Teinte RAL 7016.\n\n"
+        "## 3.2 Porte pleine P2 du local technique\n\n"
+        "Porte à âme isolante, serrure 3 points.\n\n"
+        "## 3.3 Porte vitrée P3 du hall\n\n"
+        "Porte en aluminium.\n"
+    )
+    solid, glazed = build_items(sheet, chunks).items
+    assert solid.solid and not glazed.solid
+    from zelles.domain.items import _fits
+    from zelles.domain.spec import Requirement
+
+    marking = Requirement(field=F.ACCESSIBILITY, value="repérage visuel des portes vitrées")
+    assert not _fits(ItemKind.DOOR, marking, shutters_apart=False, ud_stated=False, solid=True)
+    assert _fits(ItemKind.DOOR, marking, shutters_apart=False, ud_stated=False)
+    assert F.GLAZING_COMPOSITION not in solid.values and F.COLOR in solid.values
+    assert F.GLAZING_COMPOSITION in glazed.values

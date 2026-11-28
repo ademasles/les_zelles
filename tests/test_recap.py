@@ -156,3 +156,47 @@ def test_the_form_follows_the_material_of_most_items() -> None:
     book.items[0].values.pop(F.FRAME_MATERIAL)
     assert choose_template([pvc, alu], book).name == "alu"
     assert choose_template([], book) is DEFAULT_TEMPLATE
+
+
+def test_a_row_for_one_kind_of_item_is_filled_by_that_kind_only() -> None:
+    from zelles.domain.items import ItemKind
+
+    book, name = _book()  # a window (no hardware) and a door with a 3-point lock
+    template = RecapTemplate(
+        name="kinds",
+        sections=(
+            RecapSection(
+                title="Hardware",
+                rows=(
+                    RecapRow(
+                        label="Window hardware", fields=(F.HARDWARE,), kinds=(ItemKind.WINDOW,)
+                    ),
+                    RecapRow(label="Door hardware", fields=(F.HARDWARE,), kinds=(ItemKind.DOOR,)),
+                ),
+            ),
+        ),
+    )
+    recap = draft_recap(book, filename=name, template=template)
+    assert _cell(recap, 2, "Door hardware") == ["serrure 3 points"]
+    assert _cell(recap, 2, "Window hardware") == []
+
+
+def test_the_general_clauses_state_a_field_once_on_its_first_row() -> None:
+    from zelles.domain.items import ItemBook, ItemKind
+    from zelles.domain.spec import Requirement
+
+    book = ItemBook(general={F.HARDWARE: [Requirement(field=F.HARDWARE, value="paumelles inox")]})
+    template = RecapTemplate(
+        name="kinds",
+        sections=(
+            RecapSection(
+                title="Hardware",
+                rows=(
+                    RecapRow(label="Window", fields=(F.HARDWARE,), kinds=(ItemKind.WINDOW,)),
+                    RecapRow(label="Door", fields=(F.HARDWARE,), kinds=(ItemKind.DOOR,)),
+                ),
+            ),
+        ),
+    )
+    recap = draft_recap(book, filename="x", template=template)
+    assert [len(cell) for cell in recap.columns[0].cells] == [1, 0]

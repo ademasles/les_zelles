@@ -1,6 +1,7 @@
 # A recap form for les_zelles: sections in printed order, each row with the fields it takes.
 # Keep your company's own form next to its data (never in this repository) and point
 # ZELLES_RECAP_TEMPLATE at it. Field names: see SpecField in src/zelles/domain/spec.py.
+# A field may sit on several rows, e.g. hardware on a window row and on a door row.
 # Rows without fields stay empty for the estimator; values no row takes are listed
 # at the end of the recap.
 
@@ -33,7 +34,9 @@ rows = [
 [[sections]]
 title = "Equipment"
 rows = [
-  { label = "Hardware", fields = ["hardware"] },
+  # "kinds" keeps a row to one kind of item: window, door, facade or shutter.
+  { label = "Window hardware", fields = ["hardware"], kinds = ["window", "facade"] },
+  { label = "Door hardware", fields = ["hardware"], kinds = ["door"] },
   { label = "Shutters", fields = ["shutters"] },
   { label = "Air inlets", fields = ["air_inlets"] },
   { label = "Thresholds and accessibility", fields = ["accessibility"] },

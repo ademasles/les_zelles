@@ -75,7 +75,7 @@ _KINDS: tuple[tuple[ItemKind, re.Pattern[str]], ...] = (
 # tender describes no item more precisely.
 _FAMILY = re.compile(r"\bmenuiseries?\b", _I)
 # The item's mark on the plans: "M2", "PE 3", "CH1a", "ME01".
-_MARK = r"(?:M|F|P|PE|PF|PV|CH|VR|BS|ME|EN|MR)\s?\d{1,3}[a-z']?"
+_MARK = r"(?:M|F|P|PE|PF|PV|CH|VR|BS|ME|EN|MR|SR)\s?\d{1,3}(?:[a-z]{1,2}|')?"
 _CODE = re.compile(rf"\b({_MARK})(?=\W|$)")
 # A mark that opens a line of the item's text: "ME11 - Porte d'entrée".
 _CODE_LINE = re.compile(rf"(?m)^\W*({_MARK})\s*[-–:]")
@@ -124,6 +124,13 @@ _DOOR_PARTS = re.compile(
 _WINDOW_PARTS = re.compile(
     r"oscillo|cr[ée]mones?|poign[ée]es?\s+de\s+fen[êe]tres?|limiteurs?\s+d'ouverture", _I
 )
+_SOLID = re.compile(r"\b(?:pleines?|aveugles?)\b|\bsans\s+(?:vitrage|oculus|hublot)\b", _I)
+_GLAZED = re.compile(
+    r"\bvitr(?:[ée]e?s?|ages?)\b|\boculus\b|\bhublots?\b|\bremplissage\s+verre", _I
+)
+_GLAZING = frozenset(
+    {F.GLAZING_COMPOSITION, F.GLAZING_TYPE, F.SAFETY_GLAZING, F.SPACER, F.UG, F.SW, F.TLW}
+)
 _UD = re.compile(r"\bUd\b")
 _UW = re.compile(r"\bUw\b", _I)
 
@@ -159,6 +166,9 @@ class JoineryItem(BaseModel):
     )
     codes: list[str] = Field(default_factory=list, description="Its marks on the plans: 'M2'.")
     kind: ItemKind
+    solid: bool = Field(
+        default=False, description="A solid door or panel: it takes no glazing clause."
+    )
     values: dict[SpecField, list[ItemValue]] = Field(default_factory=dict)
 
     def own(self, field: SpecField) -> list[Requirement]:
@@ -263,10 +273,14 @@ def build_items(sheet: SpecSheet, chunks: Sequence[Chunk] | None = None) -> Item
             items[scope] = JoineryItem(
                 name=scope, group=group, codes=_codes(scope), kind=kind_of(scope) or ItemKind.WINDOW
             )
+    texts: dict[str, list[str]] = {}
     for chunk in chunks or ():
         if chunk.scope in items:
             item = items[chunk.scope]
             item.codes = list(dict.fromkeys([*item.codes, *_codes_in(chunk.text)]))
+            texts.setdefault(chunk.scope, []).append(chunk.text)
+    for scope, item in items.items():
+        item.solid = item.kind is ItemKind.DOOR and _is_solid(scope, texts.get(scope, []))
     general: list[Requirement] = []
     shared: list[Requirement] = []  # a parent item's values, for its children only
     accessories: dict[str, list[Requirement]] = {}
@@ -366,10 +380,29 @@ def _contents_twins(items: dict[str, JoineryItem]) -> list[str]:
     return twins
 
 
-def _fits(kind: ItemKind, req: Requirement, *, shutters_apart: bool, ud_stated: bool) -> bool:
+def _is_solid(heading: str, texts: list[str]) -> bool:
+    """A door said solid ("porte pleine", "bloc-porte aveugle") with no glass named."""
+    for text in (heading, " ".join(texts)):
+        if _SOLID.search(text):
+            return not _GLAZED.search(_SOLID.sub(" ", text))
+    return False
+
+
+def _fits(
+    kind: ItemKind,
+    req: Requirement,
+    *,
+    shutters_apart: bool,
+    ud_stated: bool,
+    solid: bool = False,
+) -> bool:
     """Whether a general clause can describe an item of this kind."""
     if kind is ItemKind.SHUTTER:
         return req.field in _SHUTTER_INHERITS
+    if solid and (
+        req.field in _GLAZING or (req.field == F.ACCESSIBILITY and _GLAZED.search(req.value))
+    ):
+        return False  # no glass: no glazing, no marking of glazed leaves
     if req.field == F.SHUTTERS:
         return not shutters_apart  # the tender describes its shutters as items of their own
     if req.field == F.HARDWARE:
@@ -411,7 +444,9 @@ def _inherit(
         adds = from_parent and not FIELD_CATALOG[field].numeric and field not in _CLASSES
         if field in _TENDER_WIDE or (field in own and not adds):
             continue
-        if not _fits(item.kind, req, shutters_apart=shutters_apart, ud_stated=ud_stated):
+        if not _fits(
+            item.kind, req, shutters_apart=shutters_apart, ud_stated=ud_stated, solid=item.solid
+        ):
             continue
         chapter = _chapter(place.path(req), req.scope, above_items)
         if path and chapter and path[: len(chapter)] != chapter:
