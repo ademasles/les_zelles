@@ -96,6 +96,14 @@ def analyze(
 ) -> None:
     """Analyse a CCTP and print its spec sheet."""
     settings = _settings(model, embeddings)
+    # Check where results go before the analysis runs, not after it.
+    if output:
+        _check_target(output, (".json", ".csv", ".xlsx"), "--output")
+    if recap:
+        from zelles.recap import load_templates  # noqa: PLC0415
+
+        _check_target(recap, (".xlsx",), "--recap")
+        templates = load_templates(settings.recap_template) if settings.recap_template else []
 
     async def run() -> Analysis:
         from zelles.pipeline import analyze as run_pipeline  # noqa: PLC0415
@@ -136,11 +144,8 @@ def analyze(
     sheet = analysis.sheet
     _print_sheet(sheet)
     if recap:
-        from zelles.recap import load_templates, recap_workbook  # noqa: PLC0415
+        from zelles.recap import recap_workbook  # noqa: PLC0415
 
-        if recap.suffix.lower() != ".xlsx":
-            raise typer.BadParameter("the recap must end with .xlsx")
-        templates = load_templates(settings.recap_template) if settings.recap_template else []
         recap.write_bytes(recap_workbook(sheet, analysis.chunks, templates))
         console.print(f"Wrote {recap}")
     if output:
@@ -149,11 +154,16 @@ def analyze(
             output.write_text(sheet.model_dump_json(indent=2))
         elif suffix == ".csv":
             output.write_text(to_csv(sheet), encoding="utf-8-sig")
-        elif suffix == ".xlsx":
-            output.write_bytes(to_xlsx(sheet))
         else:
-            raise typer.BadParameter("output must end with .json, .csv or .xlsx")
+            output.write_bytes(to_xlsx(sheet))
         console.print(f"Wrote {output}")
+
+
+def _check_target(path: Path, suffixes: tuple[str, ...], option: str) -> None:
+    if path.suffix.lower() not in suffixes:
+        raise typer.BadParameter(f"must end with {' or '.join(suffixes)}", param_hint=option)
+    if not path.parent.is_dir():
+        raise typer.BadParameter(f"folder {path.parent} does not exist", param_hint=option)
 
 
 @app.command()
