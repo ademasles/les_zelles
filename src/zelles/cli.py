@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from rich.console import Console
@@ -17,6 +17,9 @@ from zelles.domain.spec import FIELD_CATALOG, RequirementStatus, SpecSheet
 from zelles.exports import to_csv, to_xlsx
 from zelles.llm.registry import create_embedder, create_llm
 from zelles.observability import configure_logging
+
+if TYPE_CHECKING:
+    from zelles.pipeline import Analysis
 
 app = typer.Typer(
     help="Cited, verified analysis of joinery tender specifications (CCTP).", no_args_is_help=True
@@ -79,17 +82,22 @@ def analyze(
     file: Annotated[
         Path, typer.Argument(exists=True, dir_okay=False, help="CCTP as PDF, DOCX, TXT or MD")
     ],
+    *,
     model: ModelOpt = None,
     embeddings: EmbedOpt = None,
     output: Annotated[
         Path | None, typer.Option("--output", "-o", help="Write .json, .csv or .xlsx")
     ] = None,
     save: Annotated[bool, typer.Option(help="Store in the workspace for ask/agent/serve")] = True,
+    recap: Annotated[
+        Path | None,
+        typer.Option("--recap", help="Also write the drafted technical recap (.xlsx)"),
+    ] = None,
 ) -> None:
     """Analyse a CCTP and print its spec sheet."""
     settings = _settings(model, embeddings)
 
-    async def run() -> SpecSheet:
+    async def run() -> Analysis:
         from zelles.pipeline import analyze as run_pipeline  # noqa: PLC0415
 
         llm = create_llm(settings.llm_model, settings)
@@ -117,15 +125,24 @@ def analyze(
                 )
                 workspace.save(analysis)
                 console.print(f"Saved as document [bold]{analysis.document_id}[/]")
-            return analysis.sheet
+            return analysis
         finally:
             if llm:
                 await llm.aclose()
             if embedder:
                 await embedder.aclose()
 
-    sheet = asyncio.run(run())
+    analysis = asyncio.run(run())
+    sheet = analysis.sheet
     _print_sheet(sheet)
+    if recap:
+        from zelles.recap import load_templates, recap_workbook  # noqa: PLC0415
+
+        if recap.suffix.lower() != ".xlsx":
+            raise typer.BadParameter("the recap must end with .xlsx")
+        templates = load_templates(settings.recap_template) if settings.recap_template else []
+        recap.write_bytes(recap_workbook(sheet, analysis.chunks, templates))
+        console.print(f"Wrote {recap}")
     if output:
         suffix = output.suffix.lower()
         if suffix == ".json":

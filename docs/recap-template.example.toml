@@ -1,0 +1,41 @@
+# A recap form for les_zelles: sections in printed order, each row with the fields it takes.
+# Keep your company's own form next to its data (never in this repository) and point
+# ZELLES_RECAP_TEMPLATE at it. Field names: see SpecField in src/zelles/domain/spec.py.
+# Rows without fields stay empty for the estimator; values no row takes are listed
+# at the end of the recap.
+
+name = "Windows (example)"
+# With several forms in a folder, each tender gets the one for the material most of
+# its items are made of.
+materials = ["pvc"]
+
+[[sections]]
+title = "Joinery"
+rows = [
+  { label = "Material", fields = ["frame_material"] },
+  { label = "Range / profile", fields = ["profile_system"] },
+  { label = "Opening", fields = ["opening_type"] },
+  { label = "Colour and finish", fields = ["color", "finish"] },
+]
+
+[[sections]]
+title = "Glazing and performance"
+rows = [
+  { label = "Glazing", fields = ["glazing_composition", "glazing_type", "safety_glazing"] },
+  { label = "Warm edge", fields = ["spacer"] },
+  { label = "Uw", fields = ["uw"] },
+  { label = "Ug", fields = ["ug"] },
+  { label = "Sw / TLw", fields = ["sw", "tlw"] },
+  { label = "AEV", fields = ["aev"] },
+  { label = "Acoustics", fields = ["acoustic"] },
+]
+
+[[sections]]
+title = "Equipment"
+rows = [
+  { label = "Hardware", fields = ["hardware"] },
+  { label = "Shutters", fields = ["shutters"] },
+  { label = "Air inlets", fields = ["air_inlets"] },
+  { label = "Thresholds and accessibility", fields = ["accessibility"] },
+  { label = "Unit price" },
+]

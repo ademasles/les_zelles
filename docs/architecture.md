@@ -15,6 +15,8 @@ les_zelles is a modular monolith: one Python package, one process, no queue or v
 7. **Merge** (`extraction/merge.py`). Rules and LLM results are deduplicated per field, value and scope. Agreement between the two raises confidence.
 8. **Graph and insights** (`graph/`, `insights.py`). See [agent-and-graph.md](agent-and-graph.md).
 
+From the spec sheet and the chunks, `domain/items.py` groups values by joinery item (a window type, a door, a shutter), using the outline: an item is a heading that names one, its values are those stated under it, and it inherits the general clauses of its own chapter, never another chapter's. `recap.py` lays the items out on a recap form, one column per item and one row per form line, each value with its page; inherited values are marked. A company's own form is a TOML file kept with its data (`ZELLES_RECAP_TEMPLATE`), so its wording never enters the code.
+
 ## Serving
 
 - `api/app.py`: FastAPI under `/api/v1`. Uploads return `202` with a job id; progress streams over Server-Sent Events. Re-uploading the same file returns the cached analysis, because the document id is the first 16 hex characters of its SHA-256.

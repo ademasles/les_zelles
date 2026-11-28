@@ -27,6 +27,7 @@ from zelles.llm.registry import create_embedder, create_llm
 from zelles.observability import configure_logging
 from zelles.pipeline import document_id_for
 from zelles.qa import Answer, answer_question
+from zelles.recap import load_templates, recap_workbook
 from zelles.rendering import highlight_boxes, render_page
 from zelles.storage.db import FeedbackRow
 from zelles.storage.workspace import DocumentNotFoundError, LoadedDocument, Workspace
@@ -231,6 +232,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             body,
             media_type=media,
             headers={"Content-Disposition": f'attachment; filename="{stem}.{fmt}"'},
+        )
+
+    templates = load_templates(settings.recap_template) if settings.recap_template else []
+
+    @app.get("/api/v1/documents/{document_id}/recap.xlsx", tags=["documents"], dependencies=[api])
+    async def recap(state: StateDep, document_id: str) -> Response:
+        """The drafted technical recap: one column per joinery item, each value with its page."""
+        doc = await load(state, document_id)
+        body = await asyncio.to_thread(recap_workbook, doc.sheet, doc.chunks, templates)
+        stem = Path(doc.sheet.filename).stem
+        return Response(
+            body,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{stem}_recap.xlsx"'},
         )
 
     # ------------------------------------------------------------------ analysis
