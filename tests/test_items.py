@@ -324,3 +324,20 @@ def test_a_chapter_fire_class_binds_its_doors_only() -> None:
     req = Requirement(field=F.FIRE_RATING, value="EI 60")
     assert _fits(ItemKind.DOOR, req, shutters_apart=False, ud_stated=False)
     assert not _fits(ItemKind.WINDOW, req, shutters_apart=False, ud_stated=False)
+
+
+def test_an_item_class_replaces_its_parent_class() -> None:
+    sheet, chunks = _read(
+        "# 5 Portes intérieures\n\n"
+        "Les portes seront coupe-feu EI 60 et en bois.\n\n"
+        "## 5.1 Porte P1 du local technique\n\n"
+        "Porte coupe-feu EI 30 en aluminium.\n\n"
+        "## 5.2 Porte P2 des bureaux\n\n"
+        "Porte vitrée.\n"
+    )
+    p1, p2 = build_items(sheet, chunks).items
+    assert [(v.requirement.value, v.inherited) for v in p1.values[F.FIRE_RATING]] == [
+        ("EI 30", False)
+    ]
+    assert [v.inherited for v in p2.values[F.FIRE_RATING]] == [True]
+    assert [v.requirement.value for v in p1.values[F.FRAME_MATERIAL]] == ["Aluminium"]

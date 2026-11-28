@@ -107,6 +107,8 @@ _OTHER_TRADE = re.compile(
 _MATERIAL = re.compile(r"\b(alu(?:minium)?|bois|pvc|acier|mixte)\b", _I)
 # Tender-wide fields: they stay with the general clauses.
 _TENDER_WIDE = frozenset({F.STANDARDS, F.CERTIFICATIONS, F.REGULATION})
+# Classes and materials: an item's own replaces its parent's, like a measured value.
+_CLASSES = frozenset({F.FRAME_MATERIAL, F.AEV, F.ACOUSTIC, F.SECURITY_CLASS, F.FIRE_RATING})
 # What a shutter, blind or roller grille takes from the windows' general clauses: its
 # own clauses, colours, finish and fitting. Glazing, Uw, acoustics or PMR clauses
 # describe the windows, not it.
@@ -406,9 +408,8 @@ def _inherit(
         # A parent item's description adds to its children's ("Brise-soleil orientable"
         # above "Brise-soleil des bureaux"); a measured value of the child replaces the parent's.
         from_parent = req.scope is not None and req.scope in path
-        if field in _TENDER_WIDE or (
-            field in own and not (from_parent and not FIELD_CATALOG[field].numeric)
-        ):
+        adds = from_parent and not FIELD_CATALOG[field].numeric and field not in _CLASSES
+        if field in _TENDER_WIDE or (field in own and not adds):
             continue
         if not _fits(item.kind, req, shutters_apart=shutters_apart, ud_stated=ud_stated):
             continue
