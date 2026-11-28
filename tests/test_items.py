@@ -259,3 +259,39 @@ def test_a_revision_block_heading_does_not_take_the_lot_clauses_with_it() -> Non
     uw = [v.requirement.numeric_value for v in window.values.get(F.UW, [])]
     assert 1.4 in uw and 1.7 not in uw, uw
     assert "MODIFICATIONS" in book.outside
+
+
+KINDS = (
+    "# 3 Menuiseries aluminium\n\n"
+    "## 3.1 Généralités\n\n"
+    "Les fenêtres auront un coefficient Uw ≤ 1,4 W/m².K. Les portes auront un Ud ≤ 1,8 W/m².K.\n\n"
+    "Quincaillerie : ferme-porte hydraulique à bras compas.\n\n"
+    "Les fenêtres seront équipées de crémones à 2 points.\n\n"
+    "Isolement acoustique Ra,tr ≥ 30 dB.\n\n"
+    "Les volets roulants auront des lames en aluminium à manœuvre électrique.\n\n"
+    "Teinte RAL 7016.\n\n"
+    "## 3.2 Fenêtres F1\n\n"
+    "Fenêtres oscillo-battantes en aluminium.\n\n"
+    "## 3.3 Porte d'entrée P1\n\n"
+    "Porte en aluminium vitrée.\n\n"
+    "## 3.4 Volets roulants des chambres\n\n"
+    "Coffre extérieur.\n"
+)
+
+
+def test_each_kind_of_item_inherits_only_what_describes_it() -> None:
+    sheet, chunks = _read(KINDS)
+    window, door, shutter = build_items(sheet, chunks).items
+
+    def inherited(item, field):  # type: ignore[no-untyped-def]
+        return [v.requirement.value for v in item.values.get(field, []) if v.inherited]
+
+    assert inherited(window, F.UW) == ["Uw ≤ 1,4 W/m2.K"]
+    assert inherited(door, F.UW) == ["Ud ≤ 1,8 W/m2.K"]  # the tender gives doors their own Ud
+    assert inherited(window, F.HARDWARE) == ["crémones à 2 points"]
+    assert inherited(door, F.HARDWARE) == ["ferme-porte hydraulique à bras compas"]
+    # the shutters are items of their own: their clause is not the windows'
+    assert inherited(window, F.SHUTTERS) == []
+    assert inherited(shutter, F.SHUTTERS) != []
+    # a shutter takes colours and its own clauses, not the windows' acoustics or Uw
+    assert set(shutter.values) == {F.COLOR, F.SHUTTERS}

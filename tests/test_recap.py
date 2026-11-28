@@ -93,16 +93,21 @@ def test_an_item_states_its_own_value_and_inherits_the_rest() -> None:
     assert _cell(recap, 2, "Standards") == []  # tender-wide: stated once, in the general column
 
 
-def test_values_no_row_takes_are_kept_apart() -> None:
+def test_values_no_row_takes_stay_in_their_column() -> None:
+    from zelles.recap import OTHER_VALUES
+
     book, name = _book()
     template = RecapTemplate(
         name="short",
         sections=(RecapSection(title="Thermal", rows=(RecapRow(label="Uw", fields=(F.UW,)),)),),
     )
     recap = draft_recap(book, filename=name, template=template)
-    assert all(len(c.cells) == 1 for c in recap.columns)
-    assert F.STANDARDS in recap.unplaced
-    assert F.UW not in recap.unplaced
+    last = recap.template.sections[-1]
+    assert last.title == OTHER_VALUES
+    assert F.UW not in {f for row in last.rows for f in row.fields}
+    assert _cell(recap, 1, "Frame material") == ["PVC"]  # the window's own, in its column
+    assert _cell(recap, 0, "Standards") == ["NF DTU 36.5"]
+    assert all(len(c.cells) == len(recap.template.rows()) for c in recap.columns)
 
 
 def test_the_workbook_shows_values_with_their_page() -> None:

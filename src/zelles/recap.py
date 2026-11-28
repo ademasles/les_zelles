@@ -95,10 +95,15 @@ def load_templates(path: Path) -> list[RecapTemplate]:
 
 
 def choose_template(templates: Sequence[RecapTemplate], book: ItemBook) -> RecapTemplate:
-    """The form for the material most items are made of (a PVC form, an aluminium form)."""
+    """The form for the material most items are made of (a PVC form, an aluminium form).
+
+    Items vote with the material stated under their own heading; a general clause
+    ("tablier de volet en PVC") only counts when no item states one.
+    """
     if not templates:
         return DEFAULT_TEMPLATE
-    materials = [
+    own = [comparable(r.value) for i in book.items for r in i.own(SpecField.FRAME_MATERIAL)]
+    materials = own or [
         comparable(v.requirement.value)
         for item in book.items
         for v in item.values.get(SpecField.FRAME_MATERIAL, [])
@@ -148,10 +153,6 @@ class Recap(BaseModel):
     filename: str
     template: RecapTemplate
     columns: list[RecapColumn]
-    unplaced: dict[SpecField, list[RecapValue]] = Field(
-        default_factory=dict,
-        description="Values of fields that no template row takes, by field.",
-    )
     accessories: dict[str, list[tuple[SpecField, RecapValue]]] = Field(default_factory=dict)
     outside: dict[str, list[tuple[SpecField, RecapValue]]] = Field(default_factory=dict)
 
@@ -198,27 +199,39 @@ def _column(
     )
 
 
+OTHER_VALUES = "Other values (no row of this form takes them)"
+
+
 def draft_recap(
     book: ItemBook, *, filename: str, template: RecapTemplate = DEFAULT_TEMPLATE
 ) -> Recap:
-    """Lay an item book out on a recap form: general clauses first, then one column per item."""
+    """Lay an item book out on a recap form: general clauses first, then one column per item.
+
+    Fields that no row of the form takes get rows of their own in a last section, so each
+    value stays in its item's column.
+    """
     general = {f: [_value(r) for r in reqs] for f, reqs in book.general.items()}
+    item_values = [_item_values(item) for item in book.items]
+    taken = template.fields()
+    left = {f for values in [general, *item_values] for f in values if f not in taken}
+    if left:
+        rows = tuple(
+            RecapRow(label=info.label, fields=(f,))
+            for f, info in FIELD_CATALOG.items()
+            if f in left
+        )
+        template = template.model_copy(
+            update={"sections": (*template.sections, RecapSection(title=OTHER_VALUES, rows=rows))}
+        )
     columns = [_column("General clauses", general, template)]
-    for item in book.items:
-        column = _column(item.name, _item_values(item), template)
+    for item, values in zip(book.items, item_values, strict=True):
+        column = _column(item.name, values, template)
         column.group, column.codes, column.kind = item.group, item.codes, item.kind
         columns.append(column)
-    taken = template.fields()
-    unplaced: dict[SpecField, list[RecapValue]] = {}
-    for values in [general, *(_item_values(i) for i in book.items)]:
-        for field, found in values.items():
-            if field not in taken:
-                unplaced.setdefault(field, []).extend(found)
     return Recap(
         filename=filename,
         template=template,
         columns=columns,
-        unplaced={f: _distinct(unplaced[f]) for f in FIELD_CATALOG if f in unplaced},
         accessories={
             heading: [(r.field, _value(r)) for r in reqs]
             for heading, reqs in book.accessories.items()
@@ -275,12 +288,6 @@ def recap_to_xlsx(recap: Recap) -> bytes:
             lines = ["\n".join(v.line() for v in c.cells[index]) for c in recap.columns]
             ws.append([_safe(row.label), *(_safe(t) for t in lines)])
             index += 1
-    if recap.unplaced:
-        ws.append(["Other values (no row of this form takes them)"])
-        ws[ws.max_row][0].font = Font(bold=True)
-        for field, values in recap.unplaced.items():
-            text = "\n".join(v.line() for v in values)
-            ws.append([FIELD_CATALOG[field].label, _safe(text)])
     for row in ws.iter_rows(min_row=7):
         for cell in row:
             cell.alignment = top

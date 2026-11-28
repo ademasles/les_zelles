@@ -107,22 +107,25 @@ _OTHER_TRADE = re.compile(
 _MATERIAL = re.compile(r"\b(alu(?:minium)?|bois|pvc|acier|mixte)\b", _I)
 # Tender-wide fields: they stay with the general clauses.
 _TENDER_WIDE = frozenset({F.STANDARDS, F.CERTIFICATIONS, F.REGULATION})
-# A shutter has no glazing, opening type or air inlet of its own.
-_NOT_FOR_SHUTTERS = frozenset(
-    {
-        F.GLAZING_COMPOSITION,
-        F.GLAZING_TYPE,
-        F.SAFETY_GLAZING,
-        F.SPACER,
-        F.UG,
-        F.UW,
-        F.TLW,
-        F.OPENING_TYPE,
-        F.AIR_INLETS,
-        F.AEV,
-        F.HARDWARE,
-    }
+# What a shutter, blind or roller grille takes from the windows' general clauses: its
+# own clauses, colours, finish and fitting. Glazing, Uw, acoustics or PMR clauses
+# describe the windows, not it.
+_SHUTTER_INHERITS = frozenset({F.SHUTTERS, F.COLOR, F.FINISH, F.INSTALLATION})
+# Hardware that only a door has, and hardware that only a window has: a chapter clause
+# listing both binds each item with its own kind of parts.
+_DOOR_PARTS = re.compile(
+    r"ferme-?portes?|anti-?panique|cr[ée]mones?\s+pompiers?|tirage|b[âa]ton\s+de\s+mar[ée]chal|"
+    r"butoirs?|g[âa]ches?\s+[ée]lectriques?|ventouses?|cylindres?|serrures?|b[ée]quilles?|"
+    r"pivots?|s[ée]lecteurs?",
+    _I,
 )
+_WINDOW_PARTS = re.compile(
+    r"oscillo|cr[ée]mones?(?!\s+pompiers?)|poign[ée]es?\s+de\s+fen[êe]tres?|"
+    r"limiteurs?\s+d'ouverture",
+    _I,
+)
+_UD = re.compile(r"\bUd\b")
+_UW = re.compile(r"\bUw\b", _I)
 
 
 def kind_of(heading: str) -> ItemKind | None:
@@ -283,8 +286,16 @@ def build_items(sheet: SpecSheet, chunks: Sequence[Chunk] | None = None) -> Item
     for scope in _contents_twins(items):
         del items[scope]
     above_items = {h for scope in items for h in outline.get(scope, [])}
+    shutters_apart = any(i.kind is ItemKind.SHUTTER for i in items.values())
     for scope, item in items.items():
-        _inherit(item, outline.get(scope, []), [*shared, *general], place, above_items)
+        _inherit(
+            item,
+            outline.get(scope, []),
+            [*shared, *general],
+            place,
+            above_items,
+            shutters_apart=shutters_apart,
+        )
         item.values = {f: item.values[f] for f in FIELD_CATALOG if f in item.values}
     by_field: dict[SpecField, list[Requirement]] = {}
     for req in general:
@@ -355,13 +366,32 @@ def _contents_twins(items: dict[str, JoineryItem]) -> list[str]:
     return twins
 
 
+def _fits(kind: ItemKind, req: Requirement, *, shutters_apart: bool, ud_stated: bool) -> bool:
+    """Whether a general clause can describe an item of this kind."""
+    if kind is ItemKind.SHUTTER:
+        return req.field in _SHUTTER_INHERITS
+    if req.field == F.SHUTTERS:
+        return not shutters_apart  # the tender describes its shutters as items of their own
+    if req.field == F.HARDWARE:
+        parts = _WINDOW_PARTS if kind is ItemKind.DOOR else _DOOR_PARTS
+        return not parts.search(req.value)
+    if req.field == F.UW:
+        if kind is ItemKind.DOOR:  # a Uw binds doors only when the tender gives no Ud
+            return not (ud_stated and _UW.search(req.value))
+        return not _UD.search(req.value)
+    return True
+
+
 def _inherit(
     item: JoineryItem,
     path: list[str],
     general: list[Requirement],
     place: _Place,
     above_items: set[str],
+    *,
+    shutters_apart: bool = False,
 ) -> None:
+    ud_stated = any(r.field == F.UW and _UD.search(r.value) for r in general)
     own_material = {
         m.group(1).lower()[:3]
         for r in item.own(F.FRAME_MATERIAL)
@@ -377,7 +407,7 @@ def _inherit(
             field in own and not (from_parent and not FIELD_CATALOG[field].numeric)
         ):
             continue
-        if item.kind is ItemKind.SHUTTER and field in _NOT_FOR_SHUTTERS:
+        if not _fits(item.kind, req, shutters_apart=shutters_apart, ud_stated=ud_stated):
             continue
         chapter = _chapter(place.path(req), req.scope, above_items)
         if path and chapter and path[: len(chapter)] != chapter:
