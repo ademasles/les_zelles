@@ -1051,6 +1051,11 @@ def _excluded_spans(body: str) -> list[tuple[int, int]]:
     return spans
 
 
+_BINDING_ANYWHERE_RULES = [
+    r for r in RULES if r.field in {F.STANDARDS, F.CERTIFICATIONS, F.REGULATION}
+]
+
+
 def describes_existing(chunk: Chunk) -> bool:
     """True when the chunk sits under a heading about the existing building."""
     return any(_EXISTING.search(s) and not _WORKS.search(s) for s in chunk.section_path)
@@ -1153,14 +1158,15 @@ def extract_with_rules(chunks: list[Chunk]) -> list[Requirement]:
     found: dict[tuple[str, str, str], Requirement] = {}
     per_slot: dict[tuple[SpecField, str], tuple[str, str, str]] = {}
     for chunk in chunks:
-        if describes_existing(chunk):
-            continue
+        # A chapter on the existing building describes what is there, so its values are
+        # not requirements; the standards and rules it cites still bind the works.
+        rules = _BINDING_ANYWHERE_RULES if describes_existing(chunk) else RULES
         body = chunk.text
         # The heading line is context, not a requirement ("4.1 Volets roulants").
         skip = len(chunk.heading) if chunk.heading and body.startswith(chunk.heading) else 0
         headings = " > ".join(chunk.section_path)
         outside_lot = _excluded_spans(body)
-        for rule in RULES:
+        for rule in rules:
             if rule.heading_excludes is not None and rule.heading_excludes.search(headings):
                 continue
             if rule.heading_requires is not None and not rule.heading_requires.search(headings):

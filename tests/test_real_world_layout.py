@@ -159,6 +159,17 @@ def test_existing_building_sections_are_skipped() -> None:
     assert {r.citation.chunk_id for r in reqs if r.citation} == {"c0002"}
 
 
+def test_standards_cited_in_an_existing_building_chapter_still_bind() -> None:
+    chunk = Chunk(
+        id="c0001",
+        index=1,
+        text="Fenêtres bois simple vitrage. Les travaux respecteront le NF DTU 36.5.",
+        section_path=["2 État des lieux", "LOCALISATION"],
+    )
+    reqs = extract_with_rules([chunk])
+    assert [(r.field, r.value) for r in reqs] == [(SpecField.STANDARDS, "NF DTU 36.5")]
+
+
 def test_quantities_are_not_headings() -> None:
     assert detect_heading("3 PC 16 A avec terre, fermées par clapet étanche") is None
     assert detect_heading("5.2 Fenêtres de toit") is not None
